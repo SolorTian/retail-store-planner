@@ -1,7 +1,20 @@
+// Closed stores are removed from every source and queued for cloud deletion.
+function isClosedStore(x){return /結束\s*營業/.test(String(x.status||'').replace(/\s/g,''));}
+function purgeClosedStores(items){
+  const found=items.filter(isClosedStore).map(x=>String(x.code));
+  let changed=false;
+  for(const code of found){if(!closedStoreCodes.has(code)){closedStoreCodes.add(code);changed=true;}pendingClosedStores.add(code);}
+  const blocked=x=>closedStoreCodes.has(String(x.code));
+  for(const code of closedStoreCodes){if([...db,...customerDb,...excel].some(x=>String(x.code)===code)){pendingClosedStores.add(code);changed=true;}delete gps[code];chosen.delete(code);pendingCustomers.delete(code);pendingVisits.delete(code);}
+  db=db.filter(x=>!blocked(x));customerDb=customerDb.filter(x=>!blocked(x));excel=excel.filter(x=>!blocked(x));
+  if(customerMaster){customerMaster.codes=customerMaster.codes.filter(c=>!closedStoreCodes.has(String(c)));if(changed)customerMasterDirty=true;}
+  if(changed){removeRouteLine();dirty();}
+  return items.filter(x=>!blocked(x));
+}
 // Current responsibility comes from the complete latest customer roster.
 const rosterMergedSources = mergedSources;
 mergedSources = function () {
-  const rows = rosterMergedSources();
+  const rows = rosterMergedSources().filter(x=>!closedStoreCodes.has(String(x.code))&&!isClosedStore(x));
   if (!customerMaster) return rows;
   const current = new Set(customerMaster.codes);
   return rows.filter(x => current.has(String(x.code)) || x.source === 'manual');
@@ -30,6 +43,7 @@ function validateCompanyCustomers(items) {
 }
 function applyCompanyCustomers(data) {
   validateCompanyCustomers(data.customers);
+  data={...data,customers:purgeClosedStores(data.customers)};
   const hadMaster = !!customerMaster;
   const oldRows = new Map([...excel, ...db, ...customerDb].map(x => [String(x.code), x]));
   const byCode = new Map(customerDb.map(x => [String(x.code), x]));
@@ -83,7 +97,7 @@ const rosterUpsertCustomers = upsertCustomers;
 upsertCustomers = function (items) {
   const current = new Set(customerMaster?.codes || []);
   const previous = new Map(customerDb.map(x => [String(x.code), x]));
-  rosterUpsertCustomers(items.map(x => ({...previous.get(String(x.code)), ...x, source: current.has(String(x.code)) ? 'company' : 'manual'})));
+  rosterUpsertCustomers(purgeClosedStores(items).map(x => ({...previous.get(String(x.code)), ...x, source: current.has(String(x.code)) ? 'company' : 'manual'})));
 };
 const rosterRender = render;
 render = function () {

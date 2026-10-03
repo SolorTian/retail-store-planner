@@ -35,6 +35,8 @@ def parse_customers(data):
         by_code = {}
         for row in rows[h + 1:]:
             item = {k: str(row[i] or '').strip() for k, i in indices.items()}
+            if len(row) > 11 and '結束營業' in re.sub(r'\s+', '', str(row[11] or '')):
+                item['status'] = '結束營業'
             if not item['code']:
                 continue
             if not item['name']:

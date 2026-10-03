@@ -35,6 +35,8 @@ def parse_items(data):
         by_code = {}
         for row in rows[h + 2:]:
             item = {k: str(row[i] or '').strip() if i is not None else '' for k, i in indices.items()}
+            if len(row) > 4 and '結束營業' in re.sub(r'\s+', '', str(row[4] or '')):
+                item['status'] = '結束營業'
             if not item['code']:
                 continue
             item['visits'] = [int(row[i] or 0) for i in actual]
