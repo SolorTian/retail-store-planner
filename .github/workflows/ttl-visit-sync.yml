@@ -13,6 +13,15 @@ on:
       public_key:
         description: Browser public encryption key (not a credential)
         required: true
+      dataset:
+        description: Data to update
+        type: choice
+        options:
+          - visits
+          - customers
+          - all
+        default: visits
+        required: true
 permissions:
   contents: write
 concurrency:
@@ -38,4 +47,5 @@ jobs:
           REPORT_YEAR: ${{ inputs.year }}
           SYNC_REQUEST_ID: ${{ inputs.request_id }}
           SYNC_PUBLIC_KEY: ${{ inputs.public_key }}
+          SYNC_DATASET: ${{ inputs.dataset }}
         run: python scripts/sync_ttl_visits.py
