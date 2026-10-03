@@ -4,6 +4,8 @@ let sharedRules=null,sharedRuleRevision=0,sharedRulesStop=null,adminPresenceStop
 const sharedRuleRef=()=>firebaseApi.doc(firestore,'route_map_test_shared','frequencyRules');
 function isPlannerAdmin(){return !!cloudUser&&cloudUser.email===PLANNER_ADMIN_EMAIL&&cloudUser.emailVerified!==false;}
 function reportRulePairs(){const pairs=new Map();for(const x of excel){if(isClosedStore(x)||closedStoreCodes.has(String(x.code)))continue;const channel=String(x.channel||'').trim(),grade=String(x.grade||'').trim();if(channel&&grade)pairs.set(channel+'|'+ruleGrade(grade),{channel,grade});}return [...pairs.values()].sort((a,b)=>a.channel.localeCompare(b.channel,'zh-Hant')||a.grade.localeCompare(b.grade,'zh-Hant'));}
+// Match frequencies against the same report fields used by the dropdowns.
+const reportFrequencyFor=frequencyFor;frequencyFor=function(x){const report=x.code?excel.find(r=>String(r.code)===String(x.code)&&(r.year||reportYear)===reportYear):null;return reportFrequencyFor(report?{...x,channel:report.channel||x.channel,grade:report.grade||x.grade}:x);};
 const privateRestoreState=restoreState;restoreState=function(s){privateRestoreState(s);if(sharedRules){ruleConfig=structuredClone(sharedRules);render();}};
 const privateLoadFromCloud=loadFromCloud;loadFromCloud=async function(initial=false){await privateLoadFromCloud(initial);if(sharedRules){ruleConfig=structuredClone(sharedRules);render();}};
 function defaultSharedRules(){return {version:4,entries:[...structuredClone(V4_DEFAULTS),...['C','C級','C 級'].map(grade=>({channel:'*',grade,period:'quarter',count:1}))],monthly:{},quarterly:[],fnbOnlyA:false};}
