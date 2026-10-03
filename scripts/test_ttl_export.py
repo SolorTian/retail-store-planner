@@ -14,7 +14,7 @@ import openpyxl
 
 BASE = 'https://ttl.unidyna.com'
 
-def download_report(account, password, year):
+def company_session(account, password):
     session = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
     def request(path, data=None):
         target = urllib.parse.urljoin(BASE, path)
@@ -28,6 +28,10 @@ def download_report(account, password, year):
             return response.url, response.read()
     request('/ubmsys/login')
     request('/ubmsys/login', {'com_name': 'ttl', 'user_account': account, 'user_pwd': password, 'ci_csrf_token': ''})
+    return request
+
+def download_report(account, password, year):
+    request = company_session(account, password)
     url, body = request('/ubmsys_report_location/lists?str_date=' + str(year))
     page = body.decode('utf-8')
     if '/login' in url or 'id="user_pwd"' in page:
