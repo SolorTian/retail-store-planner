@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from test_ttl_export import download_report
+from sync_ttl_customers import download_customers, parse_customers
 
 REPO = 'SolorTian/retail-store-planner'
 RESULT_BRANCH = 'visit-sync-results'
@@ -46,15 +47,19 @@ def parse_items(data):
     finally:
         workbook.close()
 
-def encrypt_result(items, year, request_id, public_key, run_id):
+def encrypt_result(items, year, request_id, public_key, run_id, dataset='visits', customers=None):
     if not re.fullmatch(r'[a-f0-9]{32}', request_id):
         raise ValueError('Invalid request ID')
     key = serialization.load_der_public_key(base64.b64decode(public_key, validate=True))
     if not isinstance(key, rsa.RSAPublicKey) or key.key_size < 2048 or key.key_size > 4096:
         raise ValueError('Invalid public key')
     aad = f'visit-sync:{request_id}:{year}'.encode()
-    data = json.dumps({'version': 1, 'year': year, 'requestId': request_id,
-                      'updatedAt': datetime.now(timezone.utc).isoformat(), 'items': items}, ensure_ascii=False).encode()
+    payload = {'version': 1, 'year': year, 'requestId': request_id, 'dataset': dataset,
+               'updatedAt': datetime.now(timezone.utc).isoformat(), 'items': items}
+    if customers is not None:
+        payload['customers'] = customers
+        payload['customerSnapshot'] = True
+    data = json.dumps(payload, ensure_ascii=False).encode()
     secret = AESGCM.generate_key(bit_length=256)
     iv = os.urandom(12)
     cipher = AESGCM(secret).encrypt(iv, data, aad)
@@ -96,12 +101,17 @@ def main():
         raise ValueError('Invalid report year')
     public = os.environ['SYNC_PUBLIC_KEY']
     request_id = os.environ['SYNC_REQUEST_ID']
+    dataset = os.environ.get('SYNC_DATASET', 'visits')
+    if dataset not in ('visits', 'customers', 'all'):
+        raise ValueError('Invalid dataset')
     # Validate the supplied key before logging into the company service.
     encrypt_result([], year, request_id, public, os.environ['GITHUB_RUN_ID'])
-    items = parse_items(download_report(os.environ['TTL_ACCOUNT'], os.environ['TTL_PASSWORD'], year))
-    result = encrypt_result(items, year, request_id, public, os.environ['GITHUB_RUN_ID'])
+    account, password = os.environ['TTL_ACCOUNT'], os.environ['TTL_PASSWORD']
+    items = parse_items(download_report(account, password, year)) if dataset in ('visits', 'all') else []
+    customers = parse_customers(download_customers(account, password)) if dataset in ('customers', 'all') else None
+    result = encrypt_result(items, year, request_id, public, os.environ['GITHUB_RUN_ID'], dataset, customers)
     publish_result(result)
-    print(f'Encrypted visit report delivered: {len(items)} stores, {year}.')
+    print(f'Encrypted planner update delivered: {len(items)} visit records, {len(customers or [])} customer records, {year}.')
     return 0
 
 if __name__ == '__main__':
