@@ -1,0 +1,30 @@
+name: Company visit report connectivity test
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: Report year
+        required: true
+        default: '2026'
+permissions:
+  contents: read
+concurrency:
+  group: ttl-export-test
+  cancel-in-progress: false
+jobs:
+  test-export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install report parser
+        run: python -m pip install openpyxl==3.1.5
+      - name: Test independent login and Excel export
+        env:
+          TTL_ACCOUNT: ${{ secrets.TTL_ACCOUNT }}
+          TTL_PASSWORD: ${{ secrets.TTL_PASSWORD }}
+          REPORT_YEAR: ${{ inputs.year }}
+        run: python scripts/test_ttl_export.py --year "$REPORT_YEAR"
