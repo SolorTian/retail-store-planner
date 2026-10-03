@@ -27,6 +27,7 @@ async function updateCompanyVisits(dataset='visits') {
   if (location.protocol === 'file:') return toast('請使用線上測試版更新公司資料');
   if (!cloudUser) { toast('登入 Google 後即可直接更新，不需要 GitHub 授權碼'); await loginCloud(); return; }
   const year = reportYear, uid = cloudUser?.uid || null;
+  let credentialBlob; try { credentialBlob = await personalCredential(); } catch(e) { setSyncStatus(e.message); return; }
   const label = dataset === 'visits' ? year+' 年訪況' : dataset === 'customers' ? '客戶名冊與座標' : '客戶名冊、座標與 '+year+' 年訪況';
   let applied = false;
   visitSyncBusy = true;
@@ -41,7 +42,7 @@ async function updateCompanyVisits(dataset='visits') {
     const requestId = [...crypto.getRandomValues(new Uint8Array(16))].map(v => v.toString(16).padStart(2,'0')).join('');
     const keys = await crypto.subtle.generateKey({name:'RSA-OAEP',modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'}, false, ['encrypt','decrypt']);
     const publicKey = syncBase64(await crypto.subtle.exportKey('spki',keys.publicKey));
-    const created = await visitGithubApi('/actions/workflows/'+VISIT_WORKFLOW+'/dispatches', {method:'POST',body:JSON.stringify({ref:'main',inputs:{year:String(year),request_id:requestId,public_key:publicKey,dataset}})});
+    const created = await visitGithubApi('/actions/workflows/'+VISIT_WORKFLOW+'/dispatches', {method:'POST',body:JSON.stringify({ref:'main',inputs:{year:String(year),request_id:requestId,public_key:publicKey,dataset,credential_blob:credentialBlob}})});
     let runId = created?.workflow_run_id || null, finished = false;
     setSyncStatus('GitHub 正在登入公司並取得'+label+'，通常需要約 1 分鐘…');
     const deadline = Date.now()+8*60*1000;
@@ -54,7 +55,7 @@ async function updateCompanyVisits(dataset='visits') {
       }
       const run = await visitGithubApi('/actions/runs/'+runId);
       if (run.status === 'completed') {
-        if (run.conclusion !== 'success') throw Error('GitHub 更新未完成（'+run.conclusion+'），舊資料仍保留。');
+        if (run.conclusion !== 'success') throw Error('更新未完成，請確認業務王帳密或公司服務（'+run.conclusion+'），舊資料仍保留。');
         finished = true; break;
       }
     }
@@ -65,7 +66,7 @@ async function updateCompanyVisits(dataset='visits') {
     const result = await resultResponse.json();
     if (!result.content) throw Error('更新結果不存在，舊資料仍保留。');
     const data = await decryptVisitResult(JSON.parse(new TextDecoder().decode(syncBytes(result.content.replace(/\s/g,'')))), keys.privateKey,requestId,year,runId,dataset);
-    if ((cloudUser?.uid||null)!==uid || reportYear!==year || cloudBusy) throw Error('帳號、年度或雲端操作已變更，請在目前畫面重新更新。');
+    if ((cloudUser?.uid||null)!==uid || reportYear!==year || cloudBusy || ttlBinding?.envelope!==credentialBlob) throw Error('帳號、年度或雲端操作已變更，請在目前畫面重新更新。');
     // Both datasets were validated before either is applied.
     const customers = dataset !== 'visits' ? applyCompanyCustomers(data) : null;
     const count = dataset !== 'customers' ? applyCompanyVisits(data) : 0;
