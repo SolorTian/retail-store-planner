@@ -106,7 +106,19 @@ def main():
         raise ValueError('Invalid dataset')
     # Validate the supplied key before logging into the company service.
     encrypt_result([], year, request_id, public, os.environ['GITHUB_RUN_ID'])
-    account, password = os.environ['TTL_ACCOUNT'], os.environ['TTL_PASSWORD']
+    blob = json.loads(os.environ['SYNC_CREDENTIAL_BLOB'])
+    uid = os.environ['SYNC_USER_ID']
+    private_key = serialization.load_pem_private_key(os.environ['TTL_CREDENTIAL_PRIVATE_KEY'].encode(), password=None)
+    decode = lambda x: base64.b64decode(x, validate=True)
+    secret = private_key.decrypt(decode(blob['wrappedKey']), padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
+    credential = json.loads(AESGCM(secret).decrypt(decode(blob['iv']), decode(blob['ciphertext']), ('ttl-credential:' + uid).encode()))
+    if credential.get('version') != 1 or credential.get('uid') != uid:
+        raise ValueError('Invalid credential owner')
+    account, password = credential['account'], credential['password']
+    if not account or not password or any(c in account + password for c in '\r\n'):
+        raise ValueError('Invalid credential')
+    print('::add-mask::' + account.replace('%', '%25'))
+    print('::add-mask::' + password.replace('%', '%25'))
     items = parse_items(download_report(account, password, year)) if dataset in ('visits', 'all') else []
     customers = parse_customers(download_customers(account, password)) if dataset in ('customers', 'all') else None
     result = encrypt_result(items, year, request_id, public, os.environ['GITHUB_RUN_ID'], dataset, customers)
