@@ -1,13 +1,23 @@
-// Owner-authorized GitHub dispatch. Token and decryption key stay in page memory.
+// Google-authenticated dispatch through a private-secret Worker. Decryption stays in page memory.
 const VISIT_REPO='SolorTian/retail-store-planner',VISIT_WORKFLOW='ttl-visit-sync.yml';
-let visitGithubToken='',visitSyncBusy=false,visitSyncAbort=null;
+const VISIT_BACKEND='https://retail-store-planner-sync.gaexp8213.workers.dev';
+let visitSyncBusy=false,visitSyncAbort=null;
 function syncBytes(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
 function syncBase64(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes)))}
 function setSyncStatus(message){document.getElementById('visitSyncStatus').textContent=message}
-async function visitGithubApi(path,options={}){const response=await fetch('https://api.github.com/repos/'+VISIT_REPO+path,{...options,signal:options.signal||visitSyncAbort?.signal,headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2026-03-10',...(visitGithubToken?{Authorization:'Bearer '+visitGithubToken}:{}),...(options.body?{'Content-Type':'application/json'}:{}),...options.headers}});if(!response.ok){const e=Error(response.status===401?'GitHub 授權已失效，請重新連線。':response.status===403?'GitHub 權限不足或請求受限，請確認此 repository 的 Actions 讀寫權限。':response.status===404?'找不到更新流程或結果，請確認 GitHub 授權與部署。':'GitHub 連線失敗（'+response.status+'）。');e.status=response.status;throw e}return response.status===204?null:response.json()}
-function openVisitConnection(){if(visitSyncBusy)return;document.getElementById('visitTokenInput').value='';document.getElementById('visitConnectionError').textContent='';openModal('visitConnectionModal')}
-async function connectVisitGithub(){const input=document.getElementById('visitTokenInput'),token=input.value.trim();input.value='';if(!token)return;let old=visitGithubToken;visitGithubToken=token;document.getElementById('visitConnectConfirm').disabled=true;try{await visitGithubApi('/actions/workflows/'+VISIT_WORKFLOW);closeModal('visitConnectionModal');document.querySelectorAll('.visitConnectBtn').forEach(b=>b.textContent='GitHub 已連線');setSyncStatus('已連線，可更新客戶資料與 '+reportYear+' 年訪況。此頁關閉後需重新連線。')}catch(e){visitGithubToken=old;document.getElementById('visitConnectionError').textContent=e.message}finally{document.getElementById('visitConnectConfirm').disabled=false}}
-function disconnectVisitGithub(){if(visitSyncBusy)return;visitGithubToken='';document.querySelectorAll('.visitConnectBtn').forEach(b=>b.textContent='連線 GitHub');closeModal('visitConnectionModal');setSyncStatus('已清除本頁 GitHub 授權。')}
+async function visitGithubApi(path,options={}) {
+  if (!cloudUser) throw Error('請先 Google 登入，再更新公司資料。');
+  const uid=cloudUser.uid;
+  const idToken=await cloudUser.getIdToken();
+  if(cloudUser?.uid!==uid)throw Error('登入帳號已變更，請重新更新。');
+  const response=await fetch(VISIT_BACKEND+'/github?path='+encodeURIComponent(path), {
+    ...options,cache:'no-store',signal:options.signal||visitSyncAbort?.signal,
+    headers:{Authorization:'Bearer '+idToken,...(options.body?{'Content-Type':'application/json'}:{})}
+  });
+  const data=await response.json().catch(()=>null);
+  if(!response.ok){const e=Error(data?.error||(response.status===401?'請重新 Google 登入。':'更新服務暫時無法使用，舊資料仍保留。'));e.status=response.status;throw e}
+  return data;
+}
 function cancelVisitSync(){visitSyncAbort?.abort();setSyncStatus('已停止等待；舊資料仍保留，GitHub 工作可能繼續完成。')}
 function visitPause(ms,signal){return new Promise((resolve,reject)=>{const stopped=()=>{clearTimeout(timer);reject(new DOMException('Stopped','AbortError'))},timer=setTimeout(()=>{signal.removeEventListener('abort',stopped);resolve()},ms);if(signal.aborted)return stopped();signal.addEventListener('abort',stopped,{once:true})})}
 async function decryptVisitResult(envelope,key,requestId,year,runId,dataset='visits'){if(envelope.version!==1||envelope.requestId!==requestId||envelope.year!==year||(runId&&String(envelope.runId)!==String(runId)))throw Error('更新結果識別不符，未替換訪況。');const raw=await crypto.subtle.decrypt({name:'RSA-OAEP'},key,syncBytes(envelope.wrappedKey)),aes=await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['decrypt']),plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:syncBytes(envelope.iv),additionalData:new TextEncoder().encode('visit-sync:'+requestId+':'+year)},aes,syncBytes(envelope.ciphertext)),data=JSON.parse(new TextDecoder().decode(plain));if(data.version!==1||data.requestId!==requestId||data.year!==year||!Array.isArray(data.items)||(dataset!=='customers'&&!data.items.length)||data.items.length>100000)throw Error('更新結果格式不符，未替換訪況。');if((data.dataset||'visits')!==dataset)throw Error('更新資料種類不符，未替換資料。');if(dataset!=='visits'){if(data.customerSnapshot!==true)throw Error('不是完整客戶名冊，未替換資料。');validateCompanyCustomers(data.customers)}let seen=new Set;for(const x of data.items){if(typeof x.code!=='string'||!x.code||seen.has(x.code)||!Array.isArray(x.visits)||x.visits.length!==12||x.visits.some(v=>!Number.isSafeInteger(v)||v<0||v>100000))throw Error('報表店家或訪次格式不符，未替換訪況。');seen.add(x.code)}return data}
@@ -15,7 +25,7 @@ function applyCompanyVisits(data){const items=data.items.map(x=>({code:x.code,na
 async function updateCompanyVisits(dataset='visits') {
   if (!['visits','customers','all'].includes(dataset) || visitSyncBusy || cloudBusy) return;
   if (location.protocol === 'file:') return toast('請使用線上測試版更新公司資料');
-  if (!visitGithubToken) { openVisitConnection(); return; }
+  if (!cloudUser) { toast('登入 Google 後即可直接更新，不需要 GitHub 授權碼'); await loginCloud(); return; }
   const year = reportYear, uid = cloudUser?.uid || null;
   const label = dataset === 'visits' ? year+' 年訪況' : dataset === 'customers' ? '客戶名冊與座標' : '客戶名冊、座標與 '+year+' 年訪況';
   let applied = false;
@@ -50,7 +60,7 @@ async function updateCompanyVisits(dataset='visits') {
     }
     if (!finished) throw Error('更新等待逾時，舊資料仍保留；稍後可重試。');
     setSyncStatus('正在安全接收並驗證最新資料…');
-    const resultResponse = await fetch('https://api.github.com/repos/'+VISIT_REPO+'/contents/visit-sync-results/'+requestId+'.json?ref=visit-sync-results', {signal,headers:{Accept:'application/vnd.github+json'}});
+    const resultResponse = await fetch('https://api.github.com/repos/'+VISIT_REPO+'/contents/visit-sync-results/'+requestId+'.json?ref=visit-sync-results', {signal,cache:'no-store',headers:{Accept:'application/vnd.github+json'}});
     if (!resultResponse.ok) throw Error('無法取得更新結果，舊資料仍保留。');
     const result = await resultResponse.json();
     if (!result.content) throw Error('更新結果不存在，舊資料仍保留。');
