@@ -64,8 +64,8 @@ async function updateCompanyVisits(dataset='visits') {
     if (cloudUser) {
       setSyncStatus('已更新'+summary+'，正在儲存到個人雲端…');
       await saveToCloud();
-      setSyncStatus('已更新'+summary+(localDirty ? '；雲端尚未完成，資料已保留本機，請再按儲存到雲端。' : '，已儲存到雲端，手機可載入。'));
-    } else setSyncStatus('已更新'+summary+'，已保留本機草稿；登入 Google 後可複製草稿並儲存到雲端。');
+      setSyncStatus('已更新'+summary+(localDirty ? '；雲端尚未完成，資料已保留本機，請查看同步提示。' : '，已自動儲存，手機登入後即可使用。'));
+    } else setSyncStatus('已更新'+summary+'，已保留本機草稿；登入 Google 後可複製草稿並自動同步。');
     toast('公司'+label+'已更新');
   } catch (e) {
     if (e.name !== 'AbortError') setSyncStatus(applied ? '資料已更新並保留本機；雲端儲存未完成。' : e.message || '更新失敗，舊資料仍保留。');
