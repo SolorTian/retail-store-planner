@@ -13,6 +13,12 @@ on:
       public_key:
         description: Browser public encryption key (not a credential)
         required: true
+      credential_blob:
+        description: Encrypted personal company credential
+        required: true
+      user_id:
+        description: Verified Firebase user ID
+        required: true
       dataset:
         description: Data to update
         type: choice
@@ -41,8 +47,9 @@ jobs:
         run: python -m pip install openpyxl==3.1.5 cryptography==46.0.3
       - name: Export and encrypt visits for requesting browser
         env:
-          TTL_ACCOUNT: ${{ secrets.TTL_ACCOUNT }}
-          TTL_PASSWORD: ${{ secrets.TTL_PASSWORD }}
+          TTL_CREDENTIAL_PRIVATE_KEY: ${{ secrets.TTL_CREDENTIAL_PRIVATE_KEY }}
+          SYNC_CREDENTIAL_BLOB: ${{ inputs.credential_blob }}
+          SYNC_USER_ID: ${{ inputs.user_id }}
           GITHUB_TOKEN: ${{ github.token }}
           REPORT_YEAR: ${{ inputs.year }}
           SYNC_REQUEST_ID: ${{ inputs.request_id }}
