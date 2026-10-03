@@ -108,7 +108,7 @@ document.getElementById('customerFile').onchange = async e => {
       byCode.set(x.code, x);
     }
     applyCompanyCustomers({customers: [...byCode.values()], updatedAt: new Date().toISOString()});
-    toast('目前客戶名冊已更新，拜訪紀錄保留；請儲存到雲端');
+    toast('目前客戶名冊已更新，拜訪紀錄保留；登入後自動同步');
   } catch (e) {
     toast('客戶名冊匯入失敗：' + (e.message || '請確認完整匯出格式'));
   } finally { e.target.value = ''; }
