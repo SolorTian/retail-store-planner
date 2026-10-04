@@ -141,6 +141,8 @@ def main():
 if __name__ == '__main__':
     try:
         sys.exit(main())
-    except Exception:
+    except Exception as exc:
+        safe = {'Work export unavailable','Work export not XLSX','Invalid work header','Missing work columns','Invalid work ID','Work report too large','Company login failed','Invalid month','Invalid credential owner','Unexpected report destination','Unexpected login redirect'}
+        print('Sync error: '+(str(exc) if isinstance(exc,ValueError) and str(exc) in safe else type(exc).__name__), file=sys.stderr)
         print('Visit sync failed. No unencrypted report was published.', file=sys.stderr)
         sys.exit(1)

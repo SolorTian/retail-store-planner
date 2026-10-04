@@ -62,8 +62,8 @@ def download_work(account,password,year,month):
  path='/ubmsys_task/lists?'+urllib.parse.urlencode({'period':'0','interval_type':'0','task_daterange':dates})
  url,body=request(path);page=body.decode('utf-8')
  if '/login' in url or 'id="user_pwd"' in page:raise ValueError('Company login failed')
- links=[unescape(x) for x in re.findall(r'href=["\']([^"\']+)["\']',page)]
- link=next((x for x in links if '/ubmsys_task/lists?' in x and urllib.parse.parse_qs(urllib.parse.urlsplit(x).query).get('taskExport')==['3']),None)
+ links=[urllib.parse.urljoin(url,unescape(x)) for x in re.findall(r'href=["\']([^"\']+)["\']',page)]
+ link=next((x for x in links if urllib.parse.urlsplit(x).path=='/ubmsys_task/lists' and urllib.parse.parse_qs(urllib.parse.urlsplit(x).query).get('taskExport')==['3']),None)
  if not link:raise ValueError('Work export unavailable')
  split=urllib.parse.urlsplit(link);query=urllib.parse.parse_qs(split.query,keep_blank_values=True)
  query['task_daterange']=[dates];query['period']=['0'];query['interval_type']=['0']
