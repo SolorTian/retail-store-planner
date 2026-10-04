@@ -17,7 +17,7 @@ async function arrangeAutomaticRoute(){if(!autoRouteEnabled||!autoPreferenceRead
 if(!autoRouteEnabled||signature!==autoRouteSignature()||autoRouteController!==controller)return;
 const next=[...ordered.map(x=>x.code),...selected.filter(x=>!validGps(x.gps)).map(x=>x.code)];autoRouteDone=signature;autoRouteGeometry=route?.geometry||null;
 if(JSON.stringify([...chosen])!==JSON.stringify(next)){chosen=new Set(next);persistTrip();}else removeRouteLine();
-routeHint=route?'自動安排 · '+(depotStart?'營業所往返 ':'首站出發、返回營業所 ')+(route.distance/1000).toFixed(1)+' 公里 · 約 '+Math.ceil(route.duration/60)+' 分鐘（未含停留與即時交通）':'自動安排 · 依直線距離排序，'+(depotStart?'營業所往返':'首站出發、返回營業所');if(selected.length>rows.length)routeHint+=' · '+(selected.length-rows.length)+' 間缺座標';fitNext=true;render();if(activeView==='map'&&map)fitMap();
+routeHint=route?'預估路程 '+(route.distance/1000).toFixed(1)+' 公里 · 約 '+Math.ceil(route.duration/60)+' 分鐘':'依直線距離排序';if(selected.length>rows.length)routeHint+=' · '+(selected.length-rows.length)+' 間缺座標';fitNext=true;render();if(activeView==='map'&&map)fitMap();
 }finally{clearTimeout(timeout);if(autoRouteController===controller){autoRouteController=null;autoRouteRequest='';routeBusy=false;render();}}}
 const automaticPersistTrip=persistTrip;persistTrip=function(){if(!routeBusy){autoRouteDone='';autoRouteGeometry=null;}automaticPersistTrip();};
 const automaticRender=render;render=function(){automaticRender();scheduleAutomaticRoute();};
