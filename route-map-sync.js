@@ -29,7 +29,7 @@ async function updateCompanyVisits(dataset='visits') {
   const period=dataset==='work'?workPeriod:null;
   const year = dataset==='work'?Number(period.slice(0,4)):reportYear, uid = cloudUser?.uid || null;
   let credentialBlob; try { credentialBlob = await personalCredential(); } catch(e) { setSyncStatus(e.message); return; }
-  const label = dataset === 'visits' ? year+' 年訪況' : dataset === 'work' ? period+' 工作紀錄' : dataset === 'customers' ? '客戶名冊與座標' : '客戶名冊、座標與 '+year+' 年訪況';
+  const label = dataset === 'visits' ? year+' 年訪況' : dataset === 'work' ? workWindow(period).periods.join('～')+' 工作紀錄' : dataset === 'customers' ? '客戶名冊與座標' : '客戶名冊、座標與 '+year+' 年訪況';
   let applied = false;
   visitSyncBusy = true;
   visitSyncAbort = new AbortController();

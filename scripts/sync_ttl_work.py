@@ -13,7 +13,7 @@ FIELDS = {
  'plannedAt':['工作可執行期間'], 'createdAt':['建立時間'], 'checkInAt':['打卡時間','到站時間'],
  'completedAt':['工作完成日期'], 'checkOutAt':['離站時間','退卡時間'],
  'status':['任務狀態'], 'readStatus':['APP讀取狀態'], 'subject':['工作主題'], 'note':['備註'],
- 'signalAbnormal':['是否衛星訊號異常','衛星訊號異常'], 'deviceFlag':['是否刷機'],
+ 'signalValue':['是否衛星訊號異常','衛星訊號異常'], 'signalAbnormal':['是否衛星訊號異常','衛星訊號異常'], 'deviceFlag':['是否刷機'],
  'offsetAbnormal':['是否打卡偏移','是否偏移','打卡偏移'],
  'checkInLat':['打卡緯度','到站緯度'], 'checkInLng':['打卡經度','到站經度'],
  'checkOutLat':['離站緯度','退卡緯度'], 'checkOutLng':['離站經度','退卡經度'],
@@ -44,7 +44,9 @@ def parse_work(data):
    item={}
    for k,i in ix.items():
     value=row[i] if i is not None and i<len(row) else None
-    if k in FLAGS:item[k]=flag(value)
+    if k=='signalAbnormal':item[k]=(str(value if value is not None else '').strip()!='否') if i is not None else None
+    elif k=='signalValue':item[k]=str(value if value is not None else '').strip()[:300] if i is not None else None
+    elif k in FLAGS:item[k]=flag(value)
     elif k in NUMBERS:
      try:item[k]=float(value) if value not in (None,'') else None
      except (ValueError,TypeError):item[k]=None
@@ -52,11 +54,15 @@ def parse_work(data):
    if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}',item['id']):raise ValueError('Invalid work ID')
    items[item['id']]=item
    if len(items)>50000:raise ValueError('Work report too large')
-  return {'items':list(items.values()),'columns':[k for k,i in ix.items() if i is not None], 'timeBasis':'checkOutAt' if ix['checkOutAt'] is not None else 'completedAt'}
+  return {'policyVersion':2,'items':list(items.values()),'columns':[k for k,i in ix.items() if i is not None], 'timeBasis':'checkOutAt' if ix['checkOutAt'] is not None else 'completedAt'}
  finally:workbook.close()
 
+def work_range(year,month):
+ anchor=datetime(year,month,1)
+ return (anchor-timedelta(days=1)).replace(day=1), (anchor.replace(day=28)+timedelta(days=4)).replace(day=1)-timedelta(days=1)
+
 def download_work(account,password,year,month):
- start=datetime(year,month,1);end=(start.replace(day=28)+timedelta(days=4)).replace(day=1)-timedelta(days=1)
+ start,end=work_range(year,month)
  dates=start.strftime('%Y-%m-%d')+' ~ '+end.strftime('%Y-%m-%d')
  request=company_session(account,password)
  path='/ubmsys_task/lists?'+urllib.parse.urlencode({'period':'0','interval_type':'0','task_daterange':dates})

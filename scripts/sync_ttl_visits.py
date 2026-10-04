@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from test_ttl_export import download_report
 from sync_ttl_customers import download_customers, parse_customers
-from sync_ttl_work import download_work, parse_work
+from sync_ttl_work import download_work, parse_work, work_range
 
 REPO = 'SolorTian/retail-store-planner'
 RESULT_BRANCH = 'visit-sync-results'
@@ -66,6 +66,9 @@ def encrypt_result(items, year, request_id, public_key, run_id, dataset='visits'
         payload['work'] = work
         payload['workSnapshot'] = True
         payload['workMonth'] = month
+        start, end = work_range(year, month)
+        payload['workRangeStart'] = start.strftime('%Y-%m-%d')
+        payload['workRangeEnd'] = end.strftime('%Y-%m-%d')
     if account is not None:
         payload['accountLabel'] = account
     data = json.dumps(payload, ensure_ascii=False).encode()
