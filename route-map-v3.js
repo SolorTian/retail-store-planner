@@ -1,5 +1,5 @@
 // Fixed depot round trips and dense planning UI, confined to the test page.
-const DEPOT=Object.freeze({name:'台酒龍潭營業所',gps:[24.86877,121.25675]});
+const DEFAULT_DEPOT=Object.freeze({name:'台酒龍潭營業所',address:'',gps:[24.86877,121.25675]});let DEPOT=structuredClone(DEFAULT_DEPOT);
 let depotMarker=null;
 const mergedSwitchView=switchView;
 switchView=function(view){mergedSwitchView(view==='trip'?'map':view)};
@@ -13,7 +13,7 @@ function depotStop(label){let row=document.createElement('div');row.className='d
 const mergedRenderTrip=renderTrip;
 renderTrip=function(){mergedRenderTrip();let box=document.getElementById('tripList');box.prepend(depotStop('出發'));box.appendChild(depotStop('返回'));document.getElementById('routeStopCount').textContent=selectedRecords().length+' 間店';};
 const mergedEnsureMap=ensureMap;
-ensureMap=function(){let ok=mergedEnsureMap();if(ok&&!depotMarker){depotMarker=L.marker(DEPOT.gps,{icon:L.divIcon({className:'',html:'<div class="depot-pin">所</div>',iconSize:[36,36],iconAnchor:[18,18]})}).addTo(map).bindPopup(DEPOT.name+' · 固定出發／返回');}return ok};
+ensureMap=function(){let ok=mergedEnsureMap();if(ok&&!depotMarker){depotMarker=L.marker(DEPOT.gps,{icon:L.divIcon({className:'',html:'<div class="depot-pin">所</div>',iconSize:[36,36],iconAnchor:[18,18]})}).addTo(map).bindPopup(DEPOT.name);}return ok};
 fitMap=function(){if(!map)return;map.fitBounds(L.latLngBounds([DEPOT.gps,...mapRows.map(x=>x.gps)]),{padding:[35,35],maxZoom:15})};
 suggestRoute=async function(){if(routeBusy)return;let selected=selectedRecords(),rows=selected.filter(x=>validGps(x.gps));if(!rows.length)return toast('請先選取至少 1 間有座標的店家');routeBusy=true;render();try{let ordered=orderByDistance(rows,DEPOT.gps),points=[DEPOT.gps,...ordered.map(x=>x.gps)],route=null;if(points.length<=40){try{let res=await fetch('https://router.project-osrm.org/trip/v1/driving/'+points.map(p=>p[1]+','+p[0]).join(';')+'?source=first&destination=any&roundtrip=true&geometries=geojson&overview=full',{signal:AbortSignal.timeout(18000)}),data=await res.json();if(!res.ok||data.code!=='Ok'||data.waypoints?.length!==points.length||!data.trips?.[0])throw Error('no route');ordered=data.waypoints.map((x,i)=>({i,order:x.waypoint_index})).filter(x=>x.i>0).sort((a,b)=>a.order-b.order).map(x=>ordered[x.i-1]);route=data.trips[0];}catch(e){route=null}}chosen=new Set([...ordered.map(x=>x.code),...selected.filter(x=>!validGps(x.gps)).map(x=>x.code)]);persistTrip();routeHint=route?'預估路程 '+(route.distance/1000).toFixed(1)+' 公里 · 約 '+Math.ceil(route.duration/60)+' 分鐘':'依直線距離排序';if(selected.length>rows.length)routeHint+=' '+(selected.length-rows.length)+' 間缺座標未納入道路路線。';document.getElementById('mapScope').value='selected';fitNext=true;switchView('map');if(route?.geometry&&map)routeLine=L.geoJSON(route.geometry,{style:{color:'#2563eb',weight:5,opacity:.8}}).addTo(map);render();toast('已安排營業所 → 店家 → 營業所')}finally{routeBusy=false;render()}};
 render();switchView(matchMedia('(max-width:600px)').matches?'map':'list');
