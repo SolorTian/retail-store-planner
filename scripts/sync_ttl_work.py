@@ -67,6 +67,9 @@ def download_work(account,password,year,month):
  if not link:raise ValueError('Work export unavailable')
  split=urllib.parse.urlsplit(link);query=urllib.parse.parse_qs(split.query,keep_blank_values=True)
  query['task_daterange']=[dates];query['period']=['0'];query['interval_type']=['0']
+ # The observed dynamic export includes check-in evidence and stable work IDs.
+ query['taskExport']=['1']
+ query['title']=['batch_delete,period_work_date,department,salesman,accompany_supervisor,read_status,executive_task,task_proccess,channel,channel_store_code,channel_store,customer_name,channel_store_address,customer_lvl,created_date,status,create_user,checkin_time,mobile_fake_gps,mobile_root,task_finish_date,task_note,task_id,management,']
  _,data=request(urllib.parse.urlunsplit((split.scheme,split.netloc,split.path,urllib.parse.urlencode(query,doseq=True),'')))
  if not data.startswith(b'PK'):raise ValueError('Work export not XLSX')
  return data
