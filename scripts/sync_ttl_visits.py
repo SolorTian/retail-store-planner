@@ -49,7 +49,7 @@ def parse_items(data):
     finally:
         workbook.close()
 
-def encrypt_result(items, year, request_id, public_key, run_id, dataset='visits', customers=None):
+def encrypt_result(items, year, request_id, public_key, run_id, dataset='visits', customers=None, account=None):
     if not re.fullmatch(r'[a-f0-9]{32}', request_id):
         raise ValueError('Invalid request ID')
     key = serialization.load_der_public_key(base64.b64decode(public_key, validate=True))
@@ -61,6 +61,8 @@ def encrypt_result(items, year, request_id, public_key, run_id, dataset='visits'
     if customers is not None:
         payload['customers'] = customers
         payload['customerSnapshot'] = True
+    if account is not None:
+        payload['accountLabel'] = account
     data = json.dumps(payload, ensure_ascii=False).encode()
     secret = AESGCM.generate_key(bit_length=256)
     iv = os.urandom(12)
@@ -123,7 +125,7 @@ def main():
     print('::add-mask::' + password.replace('%', '%25'))
     items = parse_items(download_report(account, password, year)) if dataset in ('visits', 'all') else []
     customers = parse_customers(download_customers(account, password)) if dataset in ('customers', 'all') else None
-    result = encrypt_result(items, year, request_id, public, os.environ['GITHUB_RUN_ID'], dataset, customers)
+    result = encrypt_result(items, year, request_id, public, os.environ['GITHUB_RUN_ID'], dataset, customers, account)
     publish_result(result)
     print(f'Encrypted planner update delivered: {len(items)} visit records, {len(customers or [])} customer records, {year}.')
     return 0
