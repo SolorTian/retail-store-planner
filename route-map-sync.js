@@ -26,7 +26,7 @@ async function updateCompanyVisits(dataset='visits') {
   if (!['visits','customers','all','work'].includes(dataset) || visitSyncBusy || cloudBusy) return;
   if (location.protocol === 'file:') return toast('請使用線上測試版更新公司資料');
   if (!cloudUser) { toast('登入 Google 後即可直接更新，不需要 GitHub 授權碼'); await loginCloud(); return; }
-  const period=dataset==='work'?workPeriod:null;
+  const selectedWorkPeriod=dataset==='work'?workPeriod:null,period=dataset==='work'?currentWorkPeriod():null;
   const year = dataset==='work'?Number(period.slice(0,4)):reportYear, uid = cloudUser?.uid || null;
   let credentialBlob; try { credentialBlob = await personalCredential(); } catch(e) { setSyncStatus(e.message); return; }
   const label = dataset === 'visits' ? year+' 年訪況' : dataset === 'work' ? workWindow(period).periods.join('～')+' 工作紀錄' : dataset === 'customers' ? '客戶名冊與座標' : '客戶名冊、座標與 '+year+' 年訪況';
@@ -67,7 +67,7 @@ async function updateCompanyVisits(dataset='visits') {
     const result = await resultResponse.json();
     if (!result.content) throw Error('更新結果不存在，舊資料仍保留。');
     const data = await decryptVisitResult(JSON.parse(new TextDecoder().decode(syncBytes(result.content.replace(/\s/g,'')))), keys.privateKey,requestId,year,runId,dataset);
-    if ((cloudUser?.uid||null)!==uid || (dataset==='work'?workPeriod!==period:reportYear!==year) || cloudBusy || ttlBinding?.envelope!==credentialBlob) throw Error('帳號、年度或雲端操作已變更，請在目前畫面重新更新。');
+    if ((cloudUser?.uid||null)!==uid || (dataset==='work'?workPeriod!==selectedWorkPeriod:reportYear!==year) || cloudBusy || ttlBinding?.envelope!==credentialBlob) throw Error('帳號、年度或雲端操作已變更，請在目前畫面重新更新。');
     if(dataset==='work'){await applyCompanyWork(data);setSyncStatus('工作紀錄已更新');toast('工作紀錄已更新');return {success:true,accountLabel:data.accountLabel};}
     // Both datasets were validated before either is applied.
     const customers = dataset !== 'visits' ? applyCompanyCustomers(data) : null;

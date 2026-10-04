@@ -7,7 +7,7 @@ const WORK_CHECK_TYPES=[
 const WORK_EXTRA_TYPES=[{id:'pending',name:'未完成工作'},{id:'unread',name:'APP 未讀'},
  {id:'noStart',name:'缺打卡時間'},{id:'noEnd',name:'缺結束時間'},{id:'reversed',name:'時間倒置'},
  {id:'device',name:'系統刷機標記'},{id:'outsideMonth',name:'跨月打卡'}];
-function workSignalState(r,columns=[]){if(typeof r.signalValue==='string')return r.signalValue.trim()!=='否';if(columns.includes('signalValue'))return null;return typeof r.signalAbnormal==='boolean'?r.signalAbnormal:null;}
+function workSignalState(r,columns=[]){if(typeof r.signalValue==='string')return r.signalValue.trim()!=='否';if(columns.includes('signalValue'))return null;return null;}
 function hasWorkNote(value){return /\p{L}/u.test(String(value??'').replace(/<[^>]*>/g,' ').replace(/&(?:nbsp|#160|#xA0);/gi,' ').replace(/[\u200B-\u200D\uFEFF]/g,''));}
 function workTimestamp(value){if(!value)return null;const m=String(value).trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);if(!m)return null;const [,y,mo,d,h,mi,se='00']=m;if(+mo<1||+mo>12||+d<1||+d>31||+h>23||+mi>59||+se>59)return null;const time=Date.parse(`${y}-${mo}-${d}T${h}:${mi}:${se}+08:00`);if(!Number.isFinite(time))return null;const back=new Date(time+8*3600000).toISOString();if(back.slice(0,10)!==`${y}-${mo}-${d}`)return null;return time;}
 function workLocalDay(time){return time===null?'':new Date(time+8*3600000).toISOString().slice(0,10);}
