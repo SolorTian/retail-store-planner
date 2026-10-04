@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from test_ttl_export import download_report
 from sync_ttl_customers import download_customers, parse_customers
+from sync_ttl_work import download_work, parse_work
 
 REPO = 'SolorTian/retail-store-planner'
 RESULT_BRANCH = 'visit-sync-results'
@@ -49,7 +50,7 @@ def parse_items(data):
     finally:
         workbook.close()
 
-def encrypt_result(items, year, request_id, public_key, run_id, dataset='visits', customers=None, account=None):
+def encrypt_result(items, year, request_id, public_key, run_id, dataset='visits', customers=None, account=None, work=None, month=None):
     if not re.fullmatch(r'[a-f0-9]{32}', request_id):
         raise ValueError('Invalid request ID')
     key = serialization.load_der_public_key(base64.b64decode(public_key, validate=True))
@@ -61,6 +62,10 @@ def encrypt_result(items, year, request_id, public_key, run_id, dataset='visits'
     if customers is not None:
         payload['customers'] = customers
         payload['customerSnapshot'] = True
+    if work is not None:
+        payload['work'] = work
+        payload['workSnapshot'] = True
+        payload['workMonth'] = month
     if account is not None:
         payload['accountLabel'] = account
     data = json.dumps(payload, ensure_ascii=False).encode()
@@ -106,7 +111,7 @@ def main():
     public = os.environ['SYNC_PUBLIC_KEY']
     request_id = os.environ['SYNC_REQUEST_ID']
     dataset = os.environ.get('SYNC_DATASET', 'visits')
-    if dataset not in ('visits', 'customers', 'all'):
+    if dataset not in ('visits', 'customers', 'all', 'work'):
         raise ValueError('Invalid dataset')
     # Validate the supplied key before logging into the company service.
     encrypt_result([], year, request_id, public, os.environ['GITHUB_RUN_ID'])
@@ -125,7 +130,10 @@ def main():
     print('::add-mask::' + password.replace('%', '%25'))
     items = parse_items(download_report(account, password, year)) if dataset in ('visits', 'all') else []
     customers = parse_customers(download_customers(account, password)) if dataset in ('customers', 'all') else None
-    result = encrypt_result(items, year, request_id, public, os.environ['GITHUB_RUN_ID'], dataset, customers, account)
+    month = int(os.environ.get('SYNC_MONTH') or datetime.now(timezone.utc).month)
+    if not 1 <= month <= 12: raise ValueError('Invalid month')
+    work = parse_work(download_work(account, password, year, month)) if dataset == 'work' else None
+    result = encrypt_result(items, year, request_id, public, os.environ['GITHUB_RUN_ID'], dataset, customers, account, work, month)
     publish_result(result)
     print(f'Encrypted planner update delivered: {len(items)} visit records, {len(customers or [])} customer records, {year}.')
     return 0
