@@ -25,3 +25,5 @@ document.getElementById('supabaseUsageRefresh').onclick=refreshSupabaseUsage;
 const supabaseAdminSwitch=switchView;
 switchView=function(view){supabaseAdminSwitch(view);supabaseUsageCard.classList.toggle('hide',!isPlannerAdmin());if(view==='admin'&&Date.now()-supabaseUsageLast>60000)refreshSupabaseUsage();};
 supabaseUsageCard.classList.toggle('hide',!isPlannerAdmin());
+
+releaseButton.textContent='v1.18';releaseButton.setAttribute('aria-label','版本 v1.18，查看更新紀錄');const release18=document.createElement('article');release18.className='release-entry';release18.innerHTML='<b>v1.18</b><time>2026-10-05</time><p>改用 Supabase 保存個人資料與即時同步；一鍵更新客戶、訪況及近兩月工作紀錄；保留原版資料移轉、管理者容量與登入紀錄，加入自動資料庫健康檢查。</p>';releaseHistory.querySelector('h2').after(release18);
