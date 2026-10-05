@@ -1,6 +1,10 @@
 """Read-only connectivity test. Never persist credentials, cookies or report data."""
 import argparse
 import http.cookiejar
+import http.client
+import socket
+import time
+import urllib.error
 import io
 import os
 import re
@@ -22,10 +26,24 @@ def company_session(account, password):
             raise ValueError('Unexpected report destination')
         req = urllib.request.Request(target, data=urllib.parse.urlencode(data).encode() if data is not None else None,
             headers={'User-Agent': 'RetailStorePlannerSync/1.0', 'Referer': BASE + '/ubmsys/login'})
-        with session.open(req, timeout=60) as response:
-            if urllib.parse.urlsplit(response.url).netloc != 'ttl.unidyna.com':
-                raise ValueError('Unexpected login redirect')
-            return response.url, response.read()
+        # Only retry reads. Never replay the credential-submit POST automatically.
+        attempts = 3 if data is None else 1
+        for attempt in range(attempts):
+            try:
+                with session.open(req, timeout=60) as response:
+                    if urllib.parse.urlsplit(response.url).netloc != 'ttl.unidyna.com':
+                        raise ValueError('Unexpected login redirect')
+                    return response.url, response.read()
+            except urllib.error.HTTPError as exc:
+                if exc.code not in (429, 500, 502, 503, 504):
+                    raise
+                if attempt + 1 == attempts:
+                    raise ValueError('Company temporarily unavailable') from None
+            except (http.client.IncompleteRead, http.client.RemoteDisconnected,
+                    urllib.error.URLError, TimeoutError, socket.timeout, ConnectionError):
+                if attempt + 1 == attempts:
+                    raise ValueError('Company response interrupted' if data is None else 'Company login response interrupted') from None
+            time.sleep(attempt + 1)
     request('/ubmsys/login')
     request('/ubmsys/login', {'com_name': 'ttl', 'user_account': account, 'user_pwd': password, 'ci_csrf_token': ''})
     return request

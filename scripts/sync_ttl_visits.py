@@ -50,7 +50,7 @@ def parse_items(data):
     finally:
         workbook.close()
 
-def encrypt_result(items, year, request_id, public_key, run_id, dataset='visits', customers=None, account=None, work=None, month=None):
+def encrypt_result(items, year, request_id, public_key, run_id, dataset='visits', customers=None, account=None, work=None, month=None, error=None):
     if not re.fullmatch(r'[a-f0-9]{32}', request_id):
         raise ValueError('Invalid request ID')
     key = serialization.load_der_public_key(base64.b64decode(public_key, validate=True))
@@ -59,6 +59,8 @@ def encrypt_result(items, year, request_id, public_key, run_id, dataset='visits'
     aad = f'visit-sync:{request_id}:{year}'.encode()
     payload = {'version': 1, 'year': year, 'requestId': request_id, 'dataset': dataset,
                'updatedAt': datetime.now(timezone.utc).isoformat(), 'items': items}
+    if error is not None:
+        payload['error'] = error
     if customers is not None:
         payload['customers'] = customers
         payload['customerSnapshot'] = True
@@ -141,11 +143,48 @@ def main():
     print(f'Encrypted planner update delivered: {len(items)} visit records, {len(customers or [])} customer records, {year}.')
     return 0
 
+def safe_sync_failure(exc):
+    messages = {
+        'Company response interrupted': ('company_connection', '公司回應中斷，唯讀下載重試後仍未完成，請稍後重試'),
+        'Company login response interrupted': ('company_login_connection', '業務王登入連線中斷，請稍後重試'),
+        'Company temporarily unavailable': ('company_unavailable', '公司服務暫時無法回應，請稍後重試'),
+        'Company login failed': ('company_login', '業務王登入失敗，請確認帳號密碼與公司網站狀態'),
+        'Company export link unavailable': ('company_export', '無法找到拜訪報表匯出功能，請確認帳號權限或公司頁面是否異動'),
+        'Customer export link unavailable': ('company_export', '無法找到客戶匯出功能，請確認帳號權限或公司頁面是否異動'),
+        'Work export unavailable': ('company_export', '無法找到工作匯出功能，請確認帳號權限或公司頁面是否異動'),
+        'Export did not return an XLSX workbook': ('company_format', '公司未傳回有效的拜訪 Excel，請稍後重試'),
+        'Customer export is not an XLSX workbook': ('company_format', '公司未傳回有效的客戶 Excel，請稍後重試'),
+        'Work export not XLSX': ('company_format', '公司未傳回有效的工作 Excel，請稍後重試'),
+        'Invalid credential owner': ('credential_owner', '業務王帳號綁定不符，請重新設定帳號'),
+        'Conflicting duplicate customer code': ('customer_duplicate', '公司客戶名冊有同代碼但不同資料的客戶，請先確認名冊'),
+        'Empty customer roster': ('company_empty', '公司傳回空白客戶名冊，未覆蓋原資料'),
+        'Empty report': ('company_empty', '公司傳回空白拜訪報表，未覆蓋原資料'),
+    }
+    text = str(exc) if isinstance(exc, ValueError) else ''
+    if text in messages:
+        code, message = messages[text]
+    elif text in ('Invalid monthly columns','Invalid store columns','Invalid work header','Missing work columns'):
+        code, message = 'company_columns', '公司報表欄位不符，未覆蓋原資料，請聯絡管理者'
+    else:
+        kind = type(exc).__name__
+        if not re.fullmatch(r'[A-Za-z0-9_]{1,60}', kind): kind = 'Error'
+        code, message = 'sync_failed', '公司報表處理未完成，請重試或聯絡管理者（'+kind+'）'
+    return {'code': code, 'message': message}
+
 if __name__ == '__main__':
     try:
         sys.exit(main())
     except Exception as exc:
-        safe = {'Work export unavailable','Work export not XLSX','Invalid work header','Missing work columns','Invalid work ID','Work report too large','Company login failed','Invalid month','Invalid credential owner','Unexpected report destination','Unexpected login redirect'}
-        print('Sync error: '+(str(exc) if isinstance(exc,ValueError) and str(exc) in safe else type(exc).__name__), file=sys.stderr)
+        failure = safe_sync_failure(exc)
+        print('Sync error category: '+failure['code'], file=sys.stderr)
+        try:
+            # The requesting browser alone can decrypt this explanation.
+            envelope = encrypt_result([], int(os.environ['REPORT_YEAR']),
+                os.environ['SYNC_REQUEST_ID'], os.environ['SYNC_PUBLIC_KEY'],
+                os.environ['GITHUB_RUN_ID'], os.environ.get('SYNC_DATASET','visits'), error=failure)
+            publish_result(envelope)
+            print('Encrypted failure explanation delivered.', file=sys.stderr)
+        except Exception as delivery_error:
+            print('Failure explanation delivery did not complete: '+type(delivery_error).__name__, file=sys.stderr)
         print('Visit sync failed. No unencrypted report was published.', file=sys.stderr)
         sys.exit(1)
