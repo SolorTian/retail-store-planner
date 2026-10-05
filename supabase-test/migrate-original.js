@@ -29,7 +29,7 @@ migrationButton.onclick=async()=>{
   if(!original||original.email!==target.email)original=(await authSdk.signInWithPopup(auth,new authSdk.GoogleAuthProvider())).user;
   if(!original.emailVerified||original.email!==target.email||!original.providerData.some(x=>x.providerId==='google.com'))throw Error('請使用與測試版相同的 Google 帳戶');
   const db=dbSdk.getFirestore(app);
-  for(const bucket of ['customers','visits','routes','settings','work']){
+  for(const bucket of ['customers','visits','routes','settings','workSnapshots','workRecords']){
    migrationStatus.textContent='正在複製 '+bucket+'…';
    const snapshot=await dbSdk.getDocs(dbSdk.collection(db,'route_map_test_users',original.uid,bucket));
    const docs=snapshot.docs.filter(d=>bucket!=='settings'||!['ttlCredential','accessControl'].includes(d.id));
