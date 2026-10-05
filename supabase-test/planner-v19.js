@@ -58,15 +58,8 @@ async function runDailyRefresh(){
  finally{clearInterval(dailyLeaseRenewTimer);dailyLeaseRenewTimer=null;dailyLease=null;dailyRefreshActive=false;if(waiting)endCompanyWait();companyWait.querySelector('h3').textContent='正在載入業務王';}
 }
 const ordinaryUpdateRetry=document.getElementById('updateIssueRetry').onclick;document.getElementById('updateIssueRetry').onclick=()=>{if(dailyRefreshRetryAt===Infinity){closeModal('updateIssue');dailyRefreshRetryAt=0;dailyRefreshChecked='';runDailyRefresh();}else ordinaryUpdateRetry();};
-// Clear at Taiwan midnight, including an open/sleeping tab resuming the next day.
-const previousTodayCheck=checkTodayRoute;
-checkTodayRoute=async function(){
- if(routeDate===todayRouteDate())return;
- const next=todayRouteDate();clearTimeout(autoSaveTimer);abortAutoRoute();autoRouteDone='';autoRouteGeometry=null;removeRouteLine();chosen.clear();cloudRevision=0;
- routeDate=next;const now=taipeiToday();month=now.month;reportYear=now.year;routeHint='';dailyRefreshChecked='';dailyRefreshRetryAt=0;
- document.getElementById('routeDate').value=next;document.getElementById('monthSelect').value=String(month);document.getElementById('reportMonth').value=String(month);document.getElementById('reportYear').value=String(reportYear);cacheState();render();
- if(cloudUser){await supabasePlannerClient.rpc('planner_cleanup_own').then(plannerResult).catch(e=>updateCloudUi(e.message));if(!cloudBusy&&!localDirty)await loadFromCloud(true);else scheduleCloudSave();}
-};
+// Routes persist across days; daily company refresh remains independent.
+checkTodayRoute=async function(){routeDate=todayRouteDate();document.getElementById('routeDate').value=routeDate;};
 setInterval(()=>{checkTodayRoute().then(runDailyRefresh).catch(error=>updateCloudUi(error.message));},3000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)checkTodayRoute().then(runDailyRefresh).catch(error=>updateCloudUi(error.message));});
 const compatibleCloudUi=updateCloudUi;updateCloudUi=function(message){compatibleCloudUi(message);if(message&&!plannerAccessReady())document.getElementById('gateStatus').textContent=message;};
