@@ -69,7 +69,7 @@ async function updateCompanyVisits(dataset='visits') {
     const data = await decryptVisitResult(JSON.parse(new TextDecoder().decode(syncBytes(result.content.replace(/\s/g,'')))), keys.privateKey,requestId,year,runId,dataset);
     if(runConclusion!=='success')throw Error('公司更新工作未完成（'+runConclusion+'），舊資料仍保留。');
     if ((cloudUser?.uid||null)!==uid || (dataset==='work'?workPeriod!==selectedWorkPeriod:reportYear!==year) || cloudBusy || ttlBinding?.envelope!==credentialBlob) throw Error('帳號、年度或雲端操作已變更，請在目前畫面重新更新。');
-    if(dataset==='work'){await applyCompanyWork(data);setSyncStatus('工作紀錄已更新');toast('工作紀錄已更新');return {success:true,accountLabel:data.accountLabel};}
+    if(dataset==='work'){await applyCompanyWork(data);setSyncStatus('工作紀錄已更新');toast('工作紀錄已更新');return {success:true,accountLabel:data.accountLabel,sourceAt:data.updatedAt,workCount:data.work.items.length};}
     // Both datasets were validated before either is applied.
     const customers = dataset !== 'visits' ? applyCompanyCustomers(data) : null;
     const count = dataset !== 'customers' ? applyCompanyVisits(data) : 0;
@@ -81,7 +81,7 @@ async function updateCompanyVisits(dataset='visits') {
       setSyncStatus('已更新'+summary+(localDirty ? '；雲端尚未完成，資料已保留本機，請查看同步提示。' : '，已自動儲存，手機登入後即可使用。'));
     } else setSyncStatus('已更新'+summary+'，已保留本機草稿；登入 Google 後可複製草稿並自動同步。');
     toast('公司'+label+'已更新');
-    return {success:!localDirty,accountLabel:data.accountLabel,...(localDirty?{error:'資料已更新，但雲端儲存失敗：'+document.getElementById('cloudDetail').textContent}:{})};
+    return {success:!localDirty,accountLabel:data.accountLabel,sourceAt:data.updatedAt,customerCount:customers?.count,visitCount:count,...(localDirty?{error:'資料已更新，但雲端儲存失敗：'+document.getElementById('cloudDetail').textContent}:{})};
   } catch (e) {
     if(e.name==='TimeoutError')e=Error('更新服務連線逾時，請確認網路後重試');
     if (e.name !== 'AbortError') setSyncStatus(applied ? '資料已更新並保留本機；雲端儲存未完成。' : e.message || '更新失敗，舊資料仍保留。');
