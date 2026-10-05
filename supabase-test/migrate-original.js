@@ -33,6 +33,14 @@ migrationButton.onclick=async()=>{
     plannerResult(await supabasePlannerClient.rpc('planner_write',{operations}));copied+=operations.length;
    }
   }
+  if(target.email==='gaexp8213@gmail.com'){
+   const rules=await dbSdk.getDoc(dbSdk.doc(db,'route_map_test_shared','frequencyRules'));
+   if(rules.exists()){
+    if(cloudUser?.uid!==target.uid)throw Error('登入帳戶已變更，移轉已停止');
+    plannerResult(await supabasePlannerClient.rpc('planner_write',{operations:[{table:'planner_shared_rules',id:'frequencyRules',data:migrationJson(rules.data())}]}));
+    copied++;
+   }
+  }
   await loadFromCloud(true);migrationStatus.textContent='已移轉 '+copied+' 筆';
  }catch(error){migrationStatus.textContent='移轉未完成（已複製 '+copied+' 筆）：'+(error.message||'連線失敗');}
  finally{migrationBusy=false;migrationButton.disabled=false;}
