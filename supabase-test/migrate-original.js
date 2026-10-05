@@ -6,9 +6,15 @@ settingsContent.append(migrationButton,migrationStatus);
 const ORIGINAL_CONFIG={apiKey:'AIzaSyD6bOk90x5C_SMiVXTZih-ei9GR0kMFXr8',authDomain:'my-ttl-system.firebaseapp.com',projectId:'my-ttl-system',appId:'1:1064089344457:web:e17ae0c78af3f492767018'};
 function migrationJson(value){if(value?.toDate)return value.toDate().toISOString();if(Array.isArray(value))return value.map(migrationJson);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,migrationJson(v)]));return value;}
 let migrationBusy=false;
+let migrationConsent=false;
+const migrationDialog=document.createElement('div');migrationDialog.id='migrationConfirm';migrationDialog.className='modal';
+migrationDialog.innerHTML='<div class="dialog"><h2>移轉原版資料</h2><p>複製你的原版店家、訪況、工作與行程；管理者也會複製全站訪頻規則。原版資料保留，業務王帳密不移轉。</p><footer><button id="migrationCancel">取消</button><button id="migrationProceed" class="primary">開始移轉</button></footer></div>';
+document.body.append(migrationDialog);
+document.getElementById('migrationCancel').onclick=()=>closeModal('migrationConfirm');
+document.getElementById('migrationProceed').onclick=()=>{closeModal('migrationConfirm');migrationConsent=true;migrationButton.onclick();};
 migrationButton.onclick=async()=>{
  if(migrationBusy||!cloudUser)return;
- if(!confirm('將原版帳戶的店家、訪況、工作與行程複製到 Supabase 測試版。原版資料不會變更。測試版同代碼資料會更新；業務王帳密不移轉。'))return;
+ if(!migrationConsent){openModal('migrationConfirm');return;}migrationConsent=false;
  migrationBusy=true;migrationButton.disabled=true;const target=cloudUser;
  let copied=0;
  try{
