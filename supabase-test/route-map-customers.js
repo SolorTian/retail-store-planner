@@ -76,7 +76,7 @@ function applyCompanyCustomers(data) {
   customerMasterDirty = true;
   const before = chosen.size;
   const active = new Set(mergedSources().map(x => String(x.code)));
-  chosen = new Set([...chosen].filter(code => active.has(code)));
+  chosen = new Set([...chosen].filter(code => active.has(code)||String(code).startsWith('route:')));
   groups.clear();
   removeRouteLine();
   routeHint = '';
