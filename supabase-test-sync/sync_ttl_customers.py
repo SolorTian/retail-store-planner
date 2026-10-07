@@ -26,12 +26,21 @@ def merge_customer_rows(previous, item, account=''):
     """Merge shared-office/person assignments only when store fields agree."""
     if previous == item:
         return previous
-    if {k: v for k, v in previous.items() if k != 'owner'} != {k: v for k, v in item.items() if k != 'owner'}:
-        raise ValueError('Conflicting duplicate customer code')
     staff_id = str(account).split('@', 1)[0].strip()
     def belongs(owner):
         return bool(staff_id) and (owner == staff_id or owner.endswith('-' + staff_id))
     old_owner, new_owner = previous['owner'], item['owner']
+    # A staff assignment is authoritative over an office's shared copy for
+    # that same code, including its grade/GPS; never use export row order.
+    personal = previous if belongs(old_owner) else item if belongs(new_owner) else None
+    other = item if personal is previous else previous
+    if personal and (not other['owner'] or other['owner'].isdigit()) and not belongs(other['owner']):
+        selected = dict(personal)
+        if any('結束營業' in re.sub(r'\s+', '', x['status']) for x in (previous, item)):
+            selected['status'] = '結束營業'
+        return selected
+    if {k: v for k, v in previous.items() if k != 'owner'} != {k: v for k, v in item.items() if k != 'owner'}:
+        raise ValueError('Conflicting duplicate customer code')
     if belongs(old_owner) != belongs(new_owner):
         return previous if belongs(old_owner) else item
     old_named = bool(old_owner) and not old_owner.isdigit()
