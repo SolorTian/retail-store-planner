@@ -1,6 +1,4 @@
 // Route-only points and notes never enter company customer/visit collections.
-let routeExtras28={},routeNotes28={};
-function restoreRouteDetails28(data){routeExtras28={};routeNotes28={};for(const x of Object.values(data?.extraStops||{})){if(typeof x.code==='string'&&x.code.startsWith('route:')&&validGps(x.gps)&&['support','personal'].includes(x.kind))routeExtras28[x.code]={code:x.code,name:String(x.name||'地點').slice(0,180),gps:x.gps.map(Number),kind:x.kind,owner:String(x.owner||'').slice(0,180),companyCode:String(x.companyCode||'').slice(0,180)};}for(const [code,note] of Object.entries(data?.notes||{}))if(typeof note==='string')routeNotes28[code]=note.slice(0,1000);}
 const cache28=cacheState;cacheState=function(){cache28();const key=accountKey(),data=JSON.parse(localStorage.getItem(key)||'{}');data.extraStops=routeExtras28;data.notes=routeNotes28;localStorage.setItem(key,JSON.stringify(data));};
 const restore28=restoreState;restoreState=function(data){restoreRouteDetails28(data);restore28(data);};
 const selected28=selectedRecords;selectedRecords=function(){const all=new Map(records().map(x=>[x.code,x]));for(const x of Object.values(routeExtras28))all.set(x.code,x);return [...chosen].map(code=>all.get(code)).filter(Boolean);};
