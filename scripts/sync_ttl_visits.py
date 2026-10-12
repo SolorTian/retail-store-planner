@@ -1,5 +1,6 @@
 """Export visits in memory; publish only browser-key-encrypted results."""
 import base64
+import gzip
 import io
 import json
 import os
@@ -15,6 +16,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from test_ttl_export import download_report
 from sync_ttl_customers import download_customers, parse_customers
 from sync_ttl_work import download_work, parse_work, work_range
+from sync_ttl_fuel import download_fuel, parse_fuel
+from sync_ttl_offsets import download_offsets, parse_offsets
 
 REPO = 'SolorTian/retail-store-planner'
 RESULT_BRANCH = 'visit-sync-results'
@@ -138,6 +141,16 @@ def main():
     month = int(os.environ.get('SYNC_MONTH') or datetime.now(timezone.utc).month)
     if not 1 <= month <= 12: raise ValueError('Invalid month')
     work = parse_work(download_work(account, password, year, month)) if dataset == 'work' else None
+    if work is not None:
+        for name, download, parse in [('fuel',download_fuel,parse_fuel),('offsets',download_offsets,parse_offsets)]:
+            try:
+                source=download(account,password,year,month)
+                parsed=parse(source,account,year,month) if name=='fuel' else parse(source,year,month)
+                if name=='offsets':
+                    work['offsetsGzip']=base64.b64encode(gzip.compress(json.dumps(parsed,ensure_ascii=False,separators=(',',':')).encode(),mtime=0)).decode()
+                else:work[name]=parsed
+            except Exception as extra_error:
+                work[name+'Error']=safe_sync_failure(extra_error)['message']
     result = encrypt_result(items, year, request_id, public, os.environ['GITHUB_RUN_ID'], dataset, customers, account, work, month)
     publish_result(result)
     print(f'Encrypted planner update delivered: {len(items)} visit records, {len(customers or [])} customer records, {year}.')
@@ -155,6 +168,9 @@ def safe_sync_failure(exc):
         'Export did not return an XLSX workbook': ('company_format', '公司未傳回有效的拜訪 Excel，請稍後重試'),
         'Customer export is not an XLSX workbook': ('company_format', '公司未傳回有效的客戶 Excel，請稍後重試'),
         'Work export not XLSX': ('company_format', '公司未傳回有效的工作 Excel，請稍後重試'),
+        'Personal mileage row unavailable': ('fuel_personal', '找不到此帳號的個人里程合計，未使用營業所合計'),
+        'Personal mileage owner mismatch': ('fuel_owner', '油資總表人員與登入帳號不符'),
+        'Empty personal mileage report': ('fuel_empty', '所選月份沒有個人里程紀錄'),
         'Invalid credential owner': ('credential_owner', '業務王帳號綁定不符，請重新設定帳號'),
         'Conflicting duplicate customer code': ('customer_duplicate', '公司客戶名冊有同代碼但不同資料的客戶，請先確認名冊'),
         'Empty customer roster': ('company_empty', '公司傳回空白客戶名冊，未覆蓋原資料'),
@@ -188,3 +204,4 @@ if __name__ == '__main__':
             print('Failure explanation delivery did not complete: '+type(delivery_error).__name__, file=sys.stderr)
         print('Visit sync failed. No unencrypted report was published.', file=sys.stderr)
         sys.exit(1)
+
