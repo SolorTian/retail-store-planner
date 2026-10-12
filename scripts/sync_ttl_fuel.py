@@ -46,6 +46,5 @@ def parse_fuel(data,account,year,month):
    seen.add(date);km=float(row[4])
    if not 0<=km<=10000:raise ValueError('Invalid mileage value')
    items.append({'date':date,'route':str(row[1] or '').strip()[:12000],'km':round(km,3)})
-  if not items:raise ValueError('Empty personal mileage report')
   return {'version':1,'period':f'{year}-{month:02d}','owner':owner,'department':str(rows[2][1] or ''),'items':sorted(items,key=lambda x:x['date'])}
  finally:w.close()
