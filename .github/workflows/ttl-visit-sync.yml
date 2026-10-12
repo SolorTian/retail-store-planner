@@ -31,6 +31,7 @@ on:
           - customers
           - all
           - work
+          - fuel
         default: visits
         required: true
 permissions:
@@ -42,7 +43,7 @@ jobs:
   sync:
     if: github.actor == github.repository_owner && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

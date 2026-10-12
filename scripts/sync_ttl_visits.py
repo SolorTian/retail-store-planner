@@ -119,7 +119,7 @@ def main():
     public = os.environ['SYNC_PUBLIC_KEY']
     request_id = os.environ['SYNC_REQUEST_ID']
     dataset = os.environ.get('SYNC_DATASET', 'visits')
-    if dataset not in ('visits', 'customers', 'all', 'work'):
+    if dataset not in ('visits', 'customers', 'all', 'work', 'fuel'):
         raise ValueError('Invalid dataset')
     # Validate the supplied key before logging into the company service.
     encrypt_result([], year, request_id, public, os.environ['GITHUB_RUN_ID'])
@@ -141,7 +141,9 @@ def main():
     month = int(os.environ.get('SYNC_MONTH') or datetime.now(timezone.utc).month)
     if not 1 <= month <= 12: raise ValueError('Invalid month')
     work = parse_work(download_work(account, password, year, month)) if dataset == 'work' else None
-    if work is not None:
+    if dataset == 'fuel':
+        work = {'items': [], 'columns': [], 'fuel': parse_fuel(download_fuel(account,password,year,month),account,year,month)}
+    if dataset == 'work' and work is not None:
         for name, download, parse in [('fuel',download_fuel,parse_fuel),('offsets',download_offsets,parse_offsets)]:
             try:
                 source=download(account,password,year,month)
