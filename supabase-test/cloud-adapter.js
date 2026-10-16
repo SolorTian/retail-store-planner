@@ -7,13 +7,19 @@ function plannerRef(base,...parts){const path=[base?.path||'',...parts].filter(B
 function plannerAddress(ref){const p=ref.path.split('/');if(p[0]==='route_map_test_users'&&p.length>=3)return {table:p[2]==='settings'&&p[3]==='ttlCredential'?'planner_credentials':p[2]==='settings'&&p[3]==='accessControl'?'planner_members':'planner_documents',owner:p[1],bucket:p[2],id:p[3]};if(p[0]==='route_map_test_shared')return {table:'planner_shared_rules',id:p[1]};if(p[0]==='route_map_test_presence')return {table:'roster'};if(p[0]==='route_map_test_access')return {table:'history'};throw Error('Unsupported cloud path');}
 function plannerAccessRow(row){for(const key of ['at','lastSeen','loginAt','joinedAt'])if(row[key]){const value=new Date(row[key]);row[key]={toMillis:()=>value.getTime(),toDate:()=>value};}return row;}
 function plannerSnapshot(id,data,revision=0){return {id,_revision:revision,exists:()=>data!=null,data:()=>data};}
-async function plannerRead(ref){const a=plannerAddress(ref);let rows;
- if(a.table==='roster'){rows=plannerResult(await supabasePlannerClient.rpc('planner_roster'));return {docs:rows.map(x=>plannerSnapshot(x.uid,plannerAccessRow(x)))};}
- if(a.table==='history'){rows=plannerResult(await supabasePlannerClient.rpc('planner_history'));return {docs:rows.map((x,i)=>plannerSnapshot(String(i),plannerAccessRow(x)))};}
- if(a.table==='planner_members'){rows=plannerResult(await supabasePlannerClient.from(a.table).select('*').eq('id',a.owner));const x=rows[0];return plannerSnapshot(a.id,x?{active:x.active,joinedAt:x.joined_at,revokedAt:x.revoked_at}:null);}
- if(a.table==='planner_credentials'){rows=plannerResult(await supabasePlannerClient.from(a.table).select('*').eq('owner_id',a.owner));const x=rows[0];return plannerSnapshot(a.id,x?{...x.data,envelope:x.envelope,accountLabel:x.account_label,updatedAt:x.updated_at}:null);}
- if(a.table==='planner_shared_rules'){rows=plannerResult(await supabasePlannerClient.from(a.table).select('*'));const x=rows[0];return plannerSnapshot(a.id,x?x.data:null,x?.revision||0);}
- let query=()=>supabasePlannerClient.from(a.table).select('*').eq('owner_id',a.owner).eq('bucket',a.bucket);
+async function plannerRead(ref){
+ const controller=new AbortController();let timer;
+ const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{reject(Object.assign(Error('雲端讀取超過 30 秒，已停止等待；原資料仍保留，請重試。'),{code:'planner/read-timeout'}));controller.abort();},30000);});
+ try{return await Promise.race([plannerReadOnce(ref,controller.signal),timeout]);}
+ finally{clearTimeout(timer);}
+}
+async function plannerReadOnce(ref,signal){const a=plannerAddress(ref);let rows;
+ if(a.table==='roster'){rows=plannerResult(await supabasePlannerClient.rpc('planner_roster').abortSignal(signal));return {docs:rows.map(x=>plannerSnapshot(x.uid,plannerAccessRow(x)))};}
+ if(a.table==='history'){rows=plannerResult(await supabasePlannerClient.rpc('planner_history').abortSignal(signal));return {docs:rows.map((x,i)=>plannerSnapshot(String(i),plannerAccessRow(x)))};}
+ if(a.table==='planner_members'){rows=plannerResult(await supabasePlannerClient.from(a.table).select('*').eq('id',a.owner).abortSignal(signal));const x=rows[0];return plannerSnapshot(a.id,x?{active:x.active,joinedAt:x.joined_at,revokedAt:x.revoked_at}:null);}
+ if(a.table==='planner_credentials'){rows=plannerResult(await supabasePlannerClient.from(a.table).select('*').eq('owner_id',a.owner).abortSignal(signal));const x=rows[0];return plannerSnapshot(a.id,x?{...x.data,envelope:x.envelope,accountLabel:x.account_label,updatedAt:x.updated_at}:null);}
+ if(a.table==='planner_shared_rules'){rows=plannerResult(await supabasePlannerClient.from(a.table).select('*').abortSignal(signal));const x=rows[0];return plannerSnapshot(a.id,x?x.data:null,x?.revision||0);}
+ let query=()=>supabasePlannerClient.from(a.table).select('*').eq('owner_id',a.owner).abortSignal(signal).eq('bucket',a.bucket);
  if(a.id){rows=plannerResult(await query().eq('document_id',a.id));const x=rows[0];return plannerSnapshot(a.id,x?x.data:null,x?.revision||0);}
  rows=[];for(let from=0;;from+=1000){const page=plannerResult(await query().order('document_id').range(from,from+999));rows.push(...page);if(page.length<1000)break;}
  return {docs:rows.map(x=>plannerSnapshot(x.document_id,x.data,x.revision))};
