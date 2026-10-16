@@ -1,6 +1,8 @@
 """Read-only monthly work export; data are encrypted by the sync entry point."""
 import io
 import math
+import time
+from concurrent.futures import ThreadPoolExecutor
 import re
 import urllib.parse
 from datetime import datetime, timedelta
@@ -12,6 +14,7 @@ FIELDS = {
  'id':['工作ID','工作 ID'], 'code':['店家代碼','客戶代碼'], 'name':['店家名稱','客戶名稱'],
  'owner':['業務員','執行人員'], 'channel':['店家型態','通路別'], 'grade':['客戶階級','階級'],
  'plannedAt':['工作可執行期間'], 'createdAt':['建立時間'], 'checkInAt':['打卡時間','到站時間'],
+ 'gpsCheckInAt':['到點GPS時間'],
  'completedAt':['工作完成日期'], 'checkOutAt':['離站時間','退卡時間'],
  'status':['任務狀態'], 'readStatus':['APP讀取狀態'], 'subject':['工作主題'], 'note':['備註'],
  'signalValue':['是否衛星訊號異常','衛星訊號異常'], 'signalAbnormal':['是否衛星訊號異常','衛星訊號異常'], 'deviceFlag':['是否刷機'],
@@ -101,24 +104,37 @@ def parse_checkin_detail(page, owner):
   result.update(checkOutAt=last[0],checkOutLat=point[0] if point else None,checkOutLng=point[1] if point else None)
  return result
 
-def enrich_temporary_export(data, request):
+def enrich_work_export(data, request, include_all=True, deadline_seconds=480):
  snapshot=parse_work(data)
- temporary={r['id']:r for r in snapshot['items'] if r['name'].strip()=='臨時點'}
+ temporary={r['id']:r for r in snapshot['items'] if (include_all or r['name'].strip()=='臨時點') and (r['checkInAt'] or r['completedAt'])}
  if not temporary:return data
- details={}
- for task_id,row in temporary.items():
-  url,body=request('/ubmsys_task_message/lists/'+urllib.parse.quote(task_id,safe=''))
-  page=body.decode('utf-8')
-  if '/login' in url or 'id="user_pwd"' in page:raise ValueError('Company login failed')
-  if '工作討論' not in page:raise ValueError('Work detail unavailable')
-  details[task_id]=parse_checkin_detail(page,row['owner'])
+ deadline=time.monotonic()+deadline_seconds
+ def fetch_detail(pair):
+  task_id,row=pair
+  if time.monotonic()>=deadline:return task_id,{}
+  try:
+   url,body=request('/ubmsys_task_message/lists/'+urllib.parse.quote(task_id,safe=''))
+   page=body.decode('utf-8')
+   if '/login' in url or 'id="user_pwd"' in page:raise ValueError('Company login failed')
+   if '工作討論' not in page:return task_id,{}
+   return task_id,parse_checkin_detail(page,row['owner'])
+  except ValueError as error:
+   if str(error)=='Company login failed':raise
+   return task_id,{}
+  except Exception:
+   # Keep the report usable; an unavailable detail remains unknown, never normal.
+   return task_id,{}
+ with ThreadPoolExecutor(max_workers=4) as pool:
+  details=dict(pool.map(fetch_detail,temporary.items()))
+ for detail in details.values():
+  if detail.get('checkInAt'):detail['gpsCheckInAt']=detail['checkInAt']
  book=openpyxl.load_workbook(io.BytesIO(data))
  try:
   sheet=book.active
   header_row=next(row for row in sheet.iter_rows(max_row=10) if any(str(c.value or '').strip() in FIELDS['id'] for c in row))
   header=[str(c.value or '').strip() for c in header_row];line=header_row[0].row
   id_col=next(header.index(n)+1 for n in FIELDS['id'] if n in header)
-  keys=['checkInAt','checkInLat','checkInLng','checkOutAt','checkOutLat','checkOutLng'];indexes={}
+  keys=['checkInAt','gpsCheckInAt','checkInLat','checkInLng','checkOutAt','checkOutLat','checkOutLng'];indexes={}
   for key in keys:
    col=next((header.index(n)+1 for n in FIELDS[key] if n in header),None)
    if col is None:header.append(FIELDS[key][0]);col=len(header);sheet.cell(line,col,FIELDS[key][0])
@@ -126,9 +142,15 @@ def enrich_temporary_export(data, request):
   for row in sheet.iter_rows(min_row=line+1):
    task_id=str(row[id_col-1].value or '').strip()
    if task_id not in temporary:continue
-   for key,col in indexes.items():sheet.cell(row[0].row,col).value=details[task_id].get(key)
+   for key,col in indexes.items():
+    if key=='checkInAt' and temporary[task_id]['name'].strip()!='臨時點':continue
+    if key in details[task_id] or key not in ('checkInAt','checkOutAt'):sheet.cell(row[0].row,col).value=details[task_id].get(key)
   stream=io.BytesIO();book.save(stream);return stream.getvalue()
  finally:book.close()
+
+def enrich_temporary_export(data,request):
+ # Compatibility entry point for the original temporary-only tests.
+ return enrich_work_export(data,request,include_all=False)
 
 def download_work(account,password,year,month):
  start,end=work_range(year,month)
@@ -147,4 +169,4 @@ def download_work(account,password,year,month):
  query['title']=['batch_delete,period_work_date,department,salesman,accompany_supervisor,read_status,executive_task,task_proccess,channel,channel_store_code,channel_store,customer_name,channel_store_address,customer_lvl,created_date,status,create_user,checkin_time,mobile_fake_gps,mobile_root,task_finish_date,task_note,task_id,management,']
  _,data=request(urllib.parse.urlunsplit((split.scheme,split.netloc,split.path,urllib.parse.urlencode(query,doseq=True),'')))
  if not data.startswith(b'PK'):raise ValueError('Work export not XLSX')
- return enrich_temporary_export(data,request)
+ return enrich_work_export(data,request)
