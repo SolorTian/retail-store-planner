@@ -1,5 +1,6 @@
 """Read-only monthly work export; data are encrypted by the sync entry point."""
 import io
+import math
 import re
 import urllib.parse
 from datetime import datetime, timedelta
@@ -50,6 +51,9 @@ def parse_work(data):
     elif k in NUMBERS:
      try:item[k]=float(value) if value not in (None,'') else None
      except (ValueError,TypeError):item[k]=None
+     if isinstance(value,bool) or item[k] is not None and (
+      not math.isfinite(item[k]) or k.endswith('Lat') and abs(item[k])>90
+      or k.endswith('Lng') and abs(item[k])>180):item[k]=None
     else:item[k]=value.strftime('%Y-%m-%d %H:%M:%S') if isinstance(value,datetime) else str(value or '').strip()[:2000 if k=='note' else 300]
    if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}',item['id']):raise ValueError('Invalid work ID')
    items[item['id']]=item
@@ -60,6 +64,71 @@ def parse_work(data):
 def work_range(year,month):
  anchor=datetime(year,month,1)
  return (anchor-timedelta(days=1)).replace(day=1), (anchor.replace(day=28)+timedelta(days=4)).replace(day=1)-timedelta(days=1)
+
+def parse_checkin_detail(page, owner):
+ """Read observed task-message event markup; never substitute store coordinates."""
+ events=[]
+ for block in re.findall(r'<li\b[^>]*>(.*?)</li>',page,re.S|re.I):
+  title=re.search(r'<div\b[^>]*class=["\'][^"\']*\btitle\b[^"\']*["\'][^>]*>(.*?)</div>',block,re.S|re.I)
+  content=re.search(r'<div\b[^>]*class=["\'][^"\']*\bcontent\b[^"\']*["\'][^>]*>(.*?)</div>',block,re.S|re.I)
+  if not title or not content:continue
+  text=' '.join(unescape(re.sub(r'<[^>]+>',' ',title[1])).split())
+  event=re.match(re.escape(owner)+r'\s+(離站打卡|到站打卡|打卡)\s',text)
+  stamp=re.search(r'\(\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*\)',text)
+  if not event or not stamp:continue
+  datetime.strptime(stamp[1],'%Y-%m-%d %H:%M:%S')
+  body=unescape(re.sub(r'<[^>]+>',' ',content[1]))
+  coordinate=re.search(r'經緯度\s*[:：]\s*([-+\d.]+)\s*[,，]\s*([-+\d.]+)',body)
+  point=None
+  if coordinate:
+   try:
+    lat,lng=map(float,coordinate.groups())
+    if math.isfinite(lat) and math.isfinite(lng) and abs(lat)<=90 and abs(lng)<=180 and (lat,lng)!=(0,0):point=(lat,lng)
+   except ValueError:pass
+  events.append((stamp[1],event[1]=='離站打卡',point))
+ arrivals=sorted((e for e in events if not e[1]),key=lambda e:e[0])
+ if not arrivals:return {}
+ first=arrivals[0]
+ # Ambiguous duplicate events at the same instant cannot establish one GPS point.
+ def unique_point(matches):
+  points={e[2] for e in matches}
+  return next(iter(points)) if len(points)==1 else None
+ first_point=unique_point(e for e in arrivals if e[0]==first[0])
+ result={'checkInAt':first[0],'checkInLat':first_point[0] if first_point else None,'checkInLng':first_point[1] if first_point else None}
+ departures=sorted((e for e in events if e[1] and e[0]>=first[0]),key=lambda e:e[0])
+ if departures:
+  last=departures[-1];point=unique_point(e for e in departures if e[0]==last[0])
+  result.update(checkOutAt=last[0],checkOutLat=point[0] if point else None,checkOutLng=point[1] if point else None)
+ return result
+
+def enrich_temporary_export(data, request):
+ snapshot=parse_work(data)
+ temporary={r['id']:r for r in snapshot['items'] if r['name'].strip()=='臨時點'}
+ if not temporary:return data
+ details={}
+ for task_id,row in temporary.items():
+  url,body=request('/ubmsys_task_message/lists/'+urllib.parse.quote(task_id,safe=''))
+  page=body.decode('utf-8')
+  if '/login' in url or 'id="user_pwd"' in page:raise ValueError('Company login failed')
+  if '工作討論' not in page:raise ValueError('Work detail unavailable')
+  details[task_id]=parse_checkin_detail(page,row['owner'])
+ book=openpyxl.load_workbook(io.BytesIO(data))
+ try:
+  sheet=book.active
+  header_row=next(row for row in sheet.iter_rows(max_row=10) if any(str(c.value or '').strip() in FIELDS['id'] for c in row))
+  header=[str(c.value or '').strip() for c in header_row];line=header_row[0].row
+  id_col=next(header.index(n)+1 for n in FIELDS['id'] if n in header)
+  keys=['checkInAt','checkInLat','checkInLng','checkOutAt','checkOutLat','checkOutLng'];indexes={}
+  for key in keys:
+   col=next((header.index(n)+1 for n in FIELDS[key] if n in header),None)
+   if col is None:header.append(FIELDS[key][0]);col=len(header);sheet.cell(line,col,FIELDS[key][0])
+   indexes[key]=col
+  for row in sheet.iter_rows(min_row=line+1):
+   task_id=str(row[id_col-1].value or '').strip()
+   if task_id not in temporary:continue
+   for key,col in indexes.items():sheet.cell(row[0].row,col).value=details[task_id].get(key)
+  stream=io.BytesIO();book.save(stream);return stream.getvalue()
+ finally:book.close()
 
 def download_work(account,password,year,month):
  start,end=work_range(year,month)
@@ -78,4 +147,4 @@ def download_work(account,password,year,month):
  query['title']=['batch_delete,period_work_date,department,salesman,accompany_supervisor,read_status,executive_task,task_proccess,channel,channel_store_code,channel_store,customer_name,channel_store_address,customer_lvl,created_date,status,create_user,checkin_time,mobile_fake_gps,mobile_root,task_finish_date,task_note,task_id,management,']
  _,data=request(urllib.parse.urlunsplit((split.scheme,split.netloc,split.path,urllib.parse.urlencode(query,doseq=True),'')))
  if not data.startswith(b'PK'):raise ValueError('Work export not XLSX')
- return data
+ return enrich_temporary_export(data,request)
