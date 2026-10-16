@@ -1,3 +1,20 @@
+// A completed plan survives browser closure and midnight on this account/device.
+function durableIntent39(){return JSON.stringify([cloudUser?.uid||'',[...chosen],DEPOT.gps,autoDepotStart]);}
+function durableKey39(){return cloudUser?'planner-last-plan39:'+cloudUser.uid:null;}
+function durablePlan39(){const saved=deviceRead37(durableKey39());return saved?.uid===cloudUser?.uid&&saved.intent===durableIntent39()&&Array.isArray(saved.points)&&saved.points.every(workGpsValid)?saved:null;}
+const roadPointsBefore39=roadPoints21;
+roadPoints21=function(){if(cloudUser&&autoPreferenceReady){const saved=durablePlan39();if(saved)return saved.points;}return roadPointsBefore39();};
+const saveBefore39=saveDevicePlan37;
+saveDevicePlan37=function(){saveBefore39();if(!cloudUser||!plannerAccessReady()||!autoPreferenceReady||routeBusy)return;const key=roadKey21();if(autoRouteDone!==autoRouteSignature()||roadState21.key!==key||roadState21.status!=='done'||!validRoad37(roadState21.route))return;deviceWrite37(durableKey39(),{uid:cloudUser.uid,intent:durableIntent39(),points:roadPoints21(),road:roadState21.route,hint:routeHint});};
+const scheduleBefore39=scheduleAutomaticRoute;
+scheduleAutomaticRoute=function(){if(cloudUser&&plannerAccessReady()&&autoPreferenceReady&&!explicitArrange38){const saved=durablePlan39();if(saved){abortAutoRoute();autoRouteDone=autoRouteSignature();routeHint=saved.hint||routeHint;const key=roadKey21();if(validRoad37(saved.road)){roadCache21.set(key,saved.road);roadState21={key,status:'done',route:saved.road,error:''};}}}return scheduleBefore39();};
+const arrangeBefore39=arrangeAutomaticRoute;
+arrangeAutomaticRoute=async function(){if(cloudUser){try{localStorage.removeItem(durableKey39());}catch{}}return arrangeBefore39();};
+const loadBefore39=loadFromCloud;
+loadFromCloud=async function(initial=false){const uid=cloudUser?.uid,state=uid?deviceRead37(accountKey()):null;if(initial&&state?.device37?.uid===uid&&(state.customerDb?.length||state.excel?.length)){restoreDevicePage37();if(!localDirty)await resumePlannerCloud();return;}return loadBefore39(initial);};
+addEventListener('pagehide',()=>{saveDevicePlan37();if(cloudUser)cacheState();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)saveDevicePlan37();});
+
 // Explicit month refresh bypasses the daily cache; account-protected drafts survive.
 fuelForm34.onsubmit=async function(event){
  event.preventDefault();if(fuelBusy30||!plannerAccessReady())return;
@@ -28,4 +45,4 @@ const style39=document.createElement('style');style39.textContent=`
 .leaflet-popup-content .navlink,.leaflet-popup-content button{box-sizing:border-box;display:flex;align-items:center;justify-content:center;min-height:44px;padding:10px 12px;margin:0;width:100%;font-size:14px;line-height:1.4}
 @media(max-width:600px){nav[aria-label="主要導覽"]{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}nav[aria-label="主要導覽"] button{width:100%;min-height:44px;box-sizing:border-box;padding:8px 4px;font-size:14px;white-space:normal}.tripactions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tripactions .navlink,.tripactions button{box-sizing:border-box;min-width:68px;min-height:44px;display:flex;align-items:center;justify-content:center;padding:10px 12px;font-size:14px;line-height:1.4}.fuel-fields30{grid-template-columns:repeat(2,minmax(0,1fr))!important}.fuel-fields30 input,.fuel-fields30 select{box-sizing:border-box;width:100%;min-width:0;min-height:44px}#fuelFetch30{width:100%;min-height:44px}}
 `;document.head.append(style39);
-releaseButton.textContent='v1.39';releaseButton.setAttribute('aria-label','版本 v1.39，查看更新紀錄');const release39=document.createElement('article');release39.className='release-entry';release39.innerHTML='<b>v1.39</b><time>2026-10-16</time><p>修正油料「取得月份資料」同日只讀快取的問題，手動取得會重新抓取並保留編輯。地圖客戶彈窗顯示當次路線備註，手機導覽與地圖操作按鈕統一尺寸。主使用者觸發全員每日更新需後端完成設定與驗收後才啟用。</p>';releaseHistory.querySelector('h2').after(release39);
+releaseButton.textContent='v1.39.1';releaseButton.setAttribute('aria-label','版本 v1.39.1，查看更新紀錄');const release39=document.createElement('article');release39.className='release-entry';release39.innerHTML='<b>v1.39.1</b><time>2026-10-16</time><p>修正油料「取得月份資料」同日只讀快取的問題，手動取得會重新抓取並保留編輯。地圖客戶彈窗顯示當次路線備註，手機導覽與地圖操作按鈕統一尺寸。已完成行車路線依帳號與店點順序保存在裝置，關頁或隔天重開可沿用；變更店點、起點或主動重新安排才重算。主使用者觸發全員每日更新需後端完成設定與驗收後才啟用。</p>';releaseHistory.querySelector('h2').after(release39);saveDevicePlan37();
