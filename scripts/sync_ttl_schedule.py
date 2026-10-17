@@ -135,9 +135,13 @@ def main():
   result=execute(request,job['period'],user,job['plan'] if job['mode']=='write' else None)
   rpc('finish' if job['mode']=='write' else 'catalog',job_id,result)
   print('Schedule request result stored privately.',flush=True)
- except Exception:
+ except Exception as error:
+  safe={'Batch form unavailable','Batch form changed','Batch employee mismatch','Batch matrix changed','Invalid company store','Unknown matrix state','Customer catalogue unavailable','Company session expired','Company response interrupted','Company temporarily unavailable','Schedule database operation failed'}
+  reason=str(error) if str(error) in safe else type(error).__name__
+  print('Schedule safe diagnostic: '+reason,flush=True)
   rpc('fail',job_id)
   raise RuntimeError('Schedule request incomplete; inspect private status, never replay an uncertain write.') from None
 if __name__=='__main__':main()
+
 
 
