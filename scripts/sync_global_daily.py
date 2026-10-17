@@ -144,21 +144,35 @@ def prepare_documents(day, account, customers, visits, work, fuels, offsets, sou
     json.dumps(docs, allow_nan=False)  # Reject NaN and Infinity before any publication.
     return docs
 
+class ExportStageFailure(Exception):
+    def __init__(self, stage, kind):
+        self.stage, self.kind = stage, kind
+
+def export_stage(stage, operation):
+    try:
+        return operation()
+    except Exception as error:
+        # Never include exception messages, requests, credentials or report data.
+        kind = type(error).__name__
+        if kind not in ('ValueError','TypeError','KeyError','RuntimeError','HTTPError','URLError','TimeoutError'):
+            kind = 'ExportError'
+        raise ExportStageFailure(stage, kind) from None
+
 def export_job(job, private_key):
-    account, password = decrypt_binding(job, private_key)
+    account, password = export_stage('binding',lambda:decrypt_binding(job, private_key))
     # Defence in depth if a downstream library ever includes credentials in an error.
     for value in (account,password):
         print('::add-mask::'+value.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
     anchor = date.fromisoformat(job['day'])
-    customers = parse_customers(download_customers(account,password))
-    visits = parse_items(download_report(account,password,anchor.year))
-    work = parse_work(download_work(account,password,anchor.year,anchor.month))
+    customers = export_stage('customers',lambda:parse_customers(download_customers(account,password)))
+    visits = export_stage('visits',lambda:parse_items(download_report(account,password,anchor.year)))
+    work = export_stage('work',lambda:parse_work(download_work(account,password,anchor.year,anchor.month)))
     start, _ = work_range(anchor.year,anchor.month)
     fuels = {}
     for year, month in [(start.year,start.month),(anchor.year,anchor.month)]:
-        fuels[f'{year:04d}-{month:02d}'] = parse_fuel(download_fuel(account,password,year,month),account,year,month)
-    offsets = parse_offsets(download_offsets(account,password,anchor.year,anchor.month),anchor.year,anchor.month)
-    docs=prepare_documents(job['day'],account,customers,visits,work,fuels,offsets)
+        fuels[f'{year:04d}-{month:02d}'] = export_stage('fuel',lambda:parse_fuel(download_fuel(account,password,year,month),account,year,month))
+    offsets = export_stage('offsets',lambda:parse_offsets(download_offsets(account,password,anchor.year,anchor.month),anchor.year,anchor.month))
+    docs=export_stage('snapshot',lambda:prepare_documents(job['day'],account,customers,visits,work,fuels,offsets))
     if job.get('kind')=='pending_google' and job.get('linkedTo'):
         return {'documents':docs,'credential':seal_binding(job['linkedTo'],account,password,private_key)}
     return docs
@@ -180,9 +194,11 @@ def main():
             return 0 if state['status'] in ('done','no_eligible_accounts') else 1
         try:
             docs = export_job(job,private_key)
-            rpc('publish',day,target=job['owner'],lease=job['lease'],payload=docs)
+            export_stage('database_publish',lambda:rpc('publish',day,target=job['owner'],lease=job['lease'],payload=docs))
             print('Daily account snapshot committed.')
-        except Exception:
+        except Exception as error:
+            if isinstance(error,ExportStageFailure):
+                print('Daily export stage failed: '+error.stage+' ('+error.kind+').',flush=True)
             # Failure remains visible in persistent job status; never claim completion.
             try:
                 rpc('fail',day,target=job['owner'],lease=job['lease'])
