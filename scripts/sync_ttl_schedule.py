@@ -72,7 +72,9 @@ def parse_batch(html,period,user):
  if not customers or len({s['id'] for s in customers})!=len(customers):raise ValueError('Customer catalogue unavailable')
  hidden=[(n.a['name'],n.a.get('value','')) for n in form.all('input') if n.a.get('type')=='hidden' and n.a.get('name')]
  # Only fresh form CSRF/default fields are retained in memory; never published.
- catalog={'period':period,'employee':{'id':str(user['user_id']),'name':user['user_name']},'customers':customers,'packages':options('task_proc_id'),'custom':options('task_matter_id[]')}
+ flow_values={str(i):next((n.a.get('value') for n in form.all('input') if n.a.get('id')=='task_type'+str(i)),None) for i in (0,1)}
+ if any(not value for value in flow_values.values()):raise ValueError('Batch form changed')
+ catalog={'period':period,'employee':{'id':str(user['user_id']),'name':user['user_name']},'customers':customers,'packages':options('task_proc_id'),'custom':options('task_matter_id[]'),'flowValues':flow_values}
  return catalog,states,hidden
 
 def validate_plan(plan,catalog,states,today):
@@ -102,7 +104,7 @@ def execute(request,period,user,plan=None,today=None):
  if not selected:return {'verified':True,'created':0,'skipped':len(skipped),'message':'所選日期與店家已有排班，未重複新增。'}
  blocked={'data','user_ids[]','task_str_time','task_type','task_proc_id','task_matter_id[]','task_title'}
  fields=[(k,v) for k,v in hidden if k not in blocked]
- fields.extend([('user_ids[]',str(user['user_id'])),('task_str_time','08:00'),('task_type',plan['type']),('task_title','常態工作'),('data',','.join(store+'-'+str(int(day[-2:])) for store,day in selected)+',')])
+ fields.extend([('user_ids[]',str(user['user_id'])),('task_str_time','08:00'),('task_type',catalog['flowValues'][plan['type']]),('task_title','常態工作'),('data',','.join(store+'-'+str(int(day[-2:])) for store,day in selected)+',')])
  if plan['type']=='1':fields.append(('task_proc_id',plan['package']))
  else:fields.extend(('task_matter_id[]',step) for step in plan['custom'])
  # A write is attempted once. Never repeat POST after a lost/ambiguous response.

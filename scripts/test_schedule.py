@@ -6,7 +6,7 @@ with patch.dict(sys.modules,{'sync_global_daily':types.SimpleNamespace(decrypt_b
  from sync_ttl_schedule import own_user,parse_batch,validate_plan,execute
 USER={'user_id':'9','user_name':'測試-5555555'}
 def page(existing=False):
- return '''<form id="dataForm"><input type="hidden" name="op" value="add"><input type="hidden" name="data" value=""><select name="user_ids[]"></select><select name="task_str_time"><option value="08:00">08:00</option></select><select name="task_matter_id[]"><option value="1">到站打卡</option></select><select name="task_proc_id"><option value="42">即飲通路</option></select><select name="task_title"><option value="常態工作">常態工作</option></select><table><tr><td colspan="4">營業處 測試-5555555</td></tr><tr><td colspan="2">即飲通路</td><td>示範餐廳</td><td>A</td><td data-val="123-17" data-day="17" data-status="'''+('1' if existing else '0')+'''" value="0"></td></tr></table></form>'''
+ return '''<form id="dataForm"><input type="hidden" name="op" value="add"><input type="radio" name="task_type" id="task_type0" value="1"><input type="radio" name="task_type" id="task_type1" value="2"><input type="hidden" name="data" value=""><select name="user_ids[]"></select><select name="task_str_time"><option value="08:00">08:00</option></select><select name="task_matter_id[]"><option value="1">到站打卡</option></select><select name="task_proc_id"><option value="42">即飲通路</option></select><select name="task_title"><option value="常態工作">常態工作</option></select><table><tr><td colspan="4">營業處 測試-5555555</td></tr><tr><td colspan="2">即飲通路</td><td>示範餐廳</td><td>A</td><td data-val="123-17" data-day="17" data-status="'''+('1' if existing else '0')+'''" value="0"></td></tr></table></form>'''
 def plan():return {'time':'08:00','title':'常態工作','type':'1','package':'42','custom':[],'cells':[{'store':'123','date':'2026-10-17'}]}
 class ScheduleTests(unittest.TestCase):
  def test_employee_exact_suffix_only(self):
@@ -30,7 +30,7 @@ class ScheduleTests(unittest.TestCase):
  def test_write_once_with_correct_self_flow_then_readback(self):
   calls=[]
   def request(path,body=None):calls.append((path,body));return path,page(len(calls)>1).encode()
-  r=execute(request,'2026-10',USER,plan(),date(2026,10,17));self.assertTrue(r['verified']);posts=[b for _,b in calls if b];self.assertEqual(len(posts),1);self.assertIn(('user_ids[]','9'),posts[0]);self.assertIn(('data','123-17,'),posts[0]);self.assertIn(('task_proc_id','42'),posts[0])
+  r=execute(request,'2026-10',USER,plan(),date(2026,10,17));self.assertTrue(r['verified']);posts=[b for _,b in calls if b];self.assertEqual(len(posts),1);self.assertIn(('user_ids[]','9'),posts[0]);self.assertIn(('data','123-17,'),posts[0]);self.assertIn(('task_proc_id','42'),posts[0]);self.assertIn(('task_type','2'),posts[0])
  def test_no_post_when_fresh_check_finds_existing(self):
   calls=[]
   def request(path,body=None):calls.append(body);return path,page(True).encode()
@@ -47,6 +47,7 @@ class ScheduleTests(unittest.TestCase):
   def request(path,body=None):calls.append(body);return path,page(False).encode()
   r=execute(request,'2026-10',USER,plan(),date(2026,10,17));self.assertFalse(r['verified']);self.assertEqual(sum(b is not None for b in calls),1)
 if __name__=='__main__':unittest.main()
+
 
 
 
