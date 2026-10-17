@@ -40,7 +40,7 @@ def own_user(html,account):
 
 def parse_batch(html,period,user):
  tree=Tree(html).root
- forms=[f for f in tree.all('form') if f.a.get('id')=='dataForm']
+ forms=[f for f in tree.all('form') if f.a.get('id')=='dataForm' and any(s.a.get('name')=='user_ids[]' for s in f.all('select'))]
  if len(forms)!=1:
   print('Batch form count: '+str(len(tree.all('form')))+'; expected settings forms: '+str(len(forms)),flush=True)
   raise ValueError('Batch form unavailable')

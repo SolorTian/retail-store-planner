@@ -15,6 +15,8 @@ class ScheduleTests(unittest.TestCase):
  def test_form_identity_and_company_catalogue(self):
   catalog,states,hidden=parse_batch(page(),'2026-10',USER);self.assertEqual(catalog['customers'][0]['name'],'示範餐廳');self.assertEqual(hidden[0],('op','add'));self.assertFalse(states[('123','2026-10-17')])
   with self.assertRaises(ValueError):parse_batch(page(),'2026-10',{'user_id':'8','user_name':'別人'})
+ def test_duplicate_empty_settings_form_is_ignored(self):
+  c,s,h=parse_batch(page()+'<form id="dataForm"></form>','2026-10',USER);self.assertEqual(len(c['customers']),1)
  def test_matrix_outside_settings_form_is_supported(self):
   html=page().replace('<table>','</form><table>').replace('</table></form>','</table>')
   c,s,h=parse_batch(html,'2026-10',USER);self.assertEqual(len(c['customers']),1);self.assertEqual(c['customers'][0]['id'],'123')
