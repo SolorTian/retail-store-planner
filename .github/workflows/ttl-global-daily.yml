@@ -1,0 +1,33 @@
+name: User-triggered global daily refresh
+run-name: planner-daily-${{ inputs.batch_day }}
+on:
+  workflow_dispatch:
+    inputs:
+      batch_day:
+        description: Server-created Taiwan date; cannot create a batch here
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: planner-global-daily
+  cancel-in-progress: false
+jobs:
+  refresh:
+    if: github.actor == github.repository_owner && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 160
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing export dependencies
+        run: python -m pip install openpyxl==3.1.5 cryptography==46.0.3
+      - name: Export and atomically publish each eligible account
+        env:
+          SUPABASE_URL: https://kzzyeoehfbvslxfcyayi.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PLANNER_DAILY_SERVICE_ROLE_KEY }}
+          TTL_CREDENTIAL_PRIVATE_KEY: ${{ secrets.TTL_CREDENTIAL_PRIVATE_KEY }}
+          BATCH_DAY: ${{ inputs.batch_day }}
+        run: python scripts/sync_global_daily.py
+
