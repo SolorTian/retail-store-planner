@@ -156,6 +156,9 @@ def export_stage(stage, operation):
         kind = type(error).__name__
         if kind not in ('ValueError','TypeError','KeyError','RuntimeError','HTTPError','URLError','TimeoutError'):
             kind = 'ExportError'
+        safe_reason = {'Company login failed':'login_rejected','Customer export link unavailable':'export_link_missing','Customer export is not an XLSX workbook':'not_xlsx','Customer name missing':'customer_name_missing','Conflicting duplicate customer code':'duplicate_customer','Empty customer roster':'empty_roster','Company temporarily unavailable':'company_unavailable','Company response interrupted':'response_interrupted','Company login response interrupted':'login_interrupted'}.get(str(error))
+        if safe_reason:
+            kind += ':' + safe_reason
         raise ExportStageFailure(stage, kind) from None
 
 def export_job(job, private_key):
@@ -214,4 +217,3 @@ if __name__=='__main__':
     except Exception:
         print('Daily batch could not run. Check server configuration and saved job status.')
         raise SystemExit(1)
-
