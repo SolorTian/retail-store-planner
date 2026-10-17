@@ -1,5 +1,5 @@
 """Administrator-approved batch scheduling. Never log credentials, forms or tasks."""
-import json,os,re,urllib.request,urllib.error
+import json,os,re,urllib.request,urllib.error,urllib.parse,calendar
 from datetime import datetime,date
 from zoneinfo import ZoneInfo
 from html.parser import HTMLParser
@@ -41,7 +41,9 @@ def own_user(html,account):
 def parse_batch(html,period,user):
  tree=Tree(html).root
  forms=[f for f in tree.all('form') if f.a.get('id')=='dataForm']
- if len(forms)!=1:raise ValueError('Batch form unavailable')
+ if len(forms)!=1:
+  print('Batch form count: '+str(len(tree.all('form')))+'; expected settings forms: '+str(len(forms)),flush=True)
+  raise ValueError('Batch form unavailable')
  form=forms[0];selects={s.a.get('name'):s for s in form.all('select')}
  required={'user_ids[]','task_str_time','task_matter_id[]','task_proc_id','task_title'}
  if not required.issubset(selects):raise ValueError('Batch form changed')
@@ -134,6 +136,9 @@ def main():
   request=company_session(account,password);url,body=request('/ubmsys_task/batchlists')
   if '/login' in url:raise ValueError('Company login failed')
   user=own_user(body.decode('utf-8'),account)
+  year,month=map(int,job['period'].split('-'))
+  query={'page_status':'on','dept_id':str(user['dept_id']),'group_id':str(user['group_id']),'user_id':str(user['user_id']),'start_day':job['period']+'-01','end_day':job['period']+'-'+str(calendar.monthrange(year,month)[1]),'keyword':''}
+  request('/ubmsys_task/batchlists?'+urllib.parse.urlencode(query))
   print('Company identity verified; processing approved request.',flush=True)
   result=execute(request,job['period'],user,job['plan'] if job['mode']=='write' else None)
   rpc('finish' if job['mode']=='write' else 'catalog',job_id,result)
@@ -145,6 +150,7 @@ def main():
   rpc('fail',job_id)
   raise RuntimeError('Schedule request incomplete; inspect private status, never replay an uncertain write.') from None
 if __name__=='__main__':main()
+
 
 
 
