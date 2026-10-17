@@ -13,7 +13,7 @@ class PendingScopeTests(unittest.TestCase):
         namespace={'date':date,'re':re,'decrypt_binding':lambda j,k:('5555555@example.invalid','synthetic'),
           'download_customers':lambda *a:b'','parse_customers':lambda b,owner_staff:[{'code':'OWN','owner':'測試-5555555'}],
           'download_report':lambda *a:b'','parse_items':lambda b:[{'code':'OWN'},{'code':'OTHER'}],
-          'download_work':lambda *a:b'','parse_work':lambda b:{'items':[{'id':'own','owner':'測試-5555555'},{'id':'other','owner':'其他-9999999'}]},
+          'download_work':lambda *a,**k:b'','parse_work':lambda b:{'items':[{'id':'own','owner':'測試-5555555'},{'id':'other','owner':'其他-9999999'}]},
           'work_range':lambda *a:(date(2026,9,1),date(2026,10,31)),
           'download_fuel':lambda *a:b'','parse_fuel':lambda *a:{},'download_offsets':lambda *a:b'','parse_offsets':lambda *a:{},'prepare_documents':prepare}
         exec(code,namespace)

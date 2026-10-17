@@ -173,7 +173,7 @@ def export_job(job, private_key):
     if job.get('kind')=='pending_google':
         owned_codes={row['code'] for row in customers}
         visits=[row for row in visits if row['code'] in owned_codes]
-    work = export_stage('work',lambda:parse_work(download_work(account,password,anchor.year,anchor.month)))
+    work = export_stage('work',lambda:parse_work(download_work(account,password,anchor.year,anchor.month,owner_staff=account.split('@')[0] if job.get('kind')=='pending_google' else None)))
     if job.get('kind')=='pending_google':
         staff=account.split('@')[0]
         work={**work,'items':[row for row in work['items'] if re.search(r'(?:^|[-－])'+re.escape(staff)+r'$',str(row.get('owner','')).strip())]}

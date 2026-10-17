@@ -152,7 +152,22 @@ def enrich_temporary_export(data,request):
  # Compatibility entry point for the original temporary-only tests.
  return enrich_work_export(data,request,include_all=False)
 
-def download_work(account,password,year,month):
+def scope_work_export(data,owner_staff):
+ if not re.fullmatch(r'[0-9]{4,12}',owner_staff):raise ValueError('Invalid owner staff')
+ book=openpyxl.load_workbook(io.BytesIO(data))
+ try:
+  sheet=book.active
+  header=next(row for row in sheet.iter_rows(max_row=10) if any(str(c.value or '').strip() in FIELDS['id'] for c in row))
+  columns=[str(c.value or '').strip() for c in header]
+  owner=next(columns.index(name) for name in FIELDS['owner'] if name in columns)
+  # Filter before fetching detail GPS, so another visitor cannot consume this
+  # account's detail-query budget or appear in its eventual Google-linked data.
+  for index in range(sheet.max_row,header[0].row,-1):
+   if not re.search(r'(?:^|[-－])'+re.escape(owner_staff)+r'$',str(sheet.cell(index,owner+1).value or '').strip()):sheet.delete_rows(index)
+  stream=io.BytesIO();book.save(stream);return stream.getvalue()
+ finally:book.close()
+
+def download_work(account,password,year,month,owner_staff=None):
  start,end=work_range(year,month)
  dates=start.strftime('%Y-%m-%d')+' ~ '+end.strftime('%Y-%m-%d')
  request=company_session(account,password)
@@ -169,4 +184,4 @@ def download_work(account,password,year,month):
  query['title']=['batch_delete,period_work_date,department,salesman,accompany_supervisor,read_status,executive_task,task_proccess,channel,channel_store_code,channel_store,customer_name,channel_store_address,customer_lvl,created_date,status,create_user,checkin_time,mobile_fake_gps,mobile_root,task_finish_date,task_note,task_id,management,']
  _,data=request(urllib.parse.urlunsplit((split.scheme,split.netloc,split.path,urllib.parse.urlencode(query,doseq=True),'')))
  if not data.startswith(b'PK'):raise ValueError('Work export not XLSX')
- return enrich_work_export(data,request)
+ return enrich_work_export(scope_work_export(data,owner_staff) if owner_staff is not None else data,request)
