@@ -174,6 +174,9 @@ def export_job(job, private_key):
         owned_codes={row['code'] for row in customers}
         visits=[row for row in visits if row['code'] in owned_codes]
     work = export_stage('work',lambda:parse_work(download_work(account,password,anchor.year,anchor.month)))
+    if job.get('kind')=='pending_google':
+        staff=account.split('@')[0]
+        work={**work,'items':[row for row in work['items'] if re.search(r'(?:^|[-－])'+re.escape(staff)+r'$',str(row.get('owner','')).strip())]}
     start, _ = work_range(anchor.year,anchor.month)
     fuels = {}
     for year, month in [(start.year,start.month),(anchor.year,anchor.month)]:
