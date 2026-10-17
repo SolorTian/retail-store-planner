@@ -1,6 +1,8 @@
 // Company-only profiles are administrator view models, never fabricated auth users.
 let pendingManagerCache42=new Map(),pendingManagerContext42='',pendingManagerBusy42=false,pendingManagerRequest42=0,pendingManagerRetry42=0;
 function pendingPerson42(id){return 'pending:'+id;}
+const pendingCatalogueBefore42=catalogueActive;
+catalogueActive=function(uid){return managerAllowed()&&String(uid).startsWith('pending:')&&pendingManagerCache42.has(String(uid).slice(8))?true:pendingCatalogueBefore42(uid);};
 function pendingWork42(person,period){const p=pendingManagerCache42.get(person.profileId),docs=p?.documents||[],meta=docs.find(d=>d.bucket==='workSnapshots'&&d.id===period)?.data;return {person,status:meta?'ready':'missing',source:docs.filter(d=>d.bucket==='workRecords'&&d.id.startsWith(period+'_')).flatMap(d=>d.data.items||[]),meta:meta||null};}
 function injectPendingManager42(){
  if(!managerAllowed())return;
@@ -17,7 +19,7 @@ async function loadPendingManager42(force=false){
 }
 const pendingWatchBefore42=watchManagerPerson;watchManagerPerson=function(person,generation){if(person.pendingCompany)return;return pendingWatchBefore42(person,generation);};
 const pendingReadBefore42=readManagerWork24;readManagerWork24=async function(person,period,generation){if(!person.pendingCompany)return pendingReadBefore42(person,period,generation);if(generation!==allWorkGeneration24||!managerAllowed())return;allWorkStates24.set(person.uid,pendingWork42(person,period));drawManagerWork24();};
-const pendingOverviewBefore42=renderManagerOverview;renderManagerOverview=function(){injectPendingManager42();pendingOverviewBefore42();if(!managerAllowed())return;for(const row of document.querySelectorAll('#managerVisitors .manager-person-row')){const remove=row.querySelector('.remove-planner'),email=row.querySelector('.manager-visitor small')?.textContent;if(remove&&[...pendingManagerCache42.values()].some(p=>p.accountLabel===email))remove.remove();}loadPendingManager42();};
+const pendingOverviewBefore42=renderManagerOverview;renderManagerOverview=function(){injectPendingManager42();pendingOverviewBefore42();if(!managerAllowed())return;for(const row of document.querySelectorAll('#managerVisitors .manager-person-row')){const email=row.querySelector('.manager-visitor small')?.textContent;if([...pendingManagerCache42.values()].some(p=>p.accountLabel===email)){row.querySelector('.remove-planner')?.remove();row.querySelector('.manager-actions23')?.remove();const label=document.createElement('small');label.textContent='業務王訪員 · 尚未連結 Google';row.append(label);}}loadPendingManager42();};
 const pendingStopBefore42=stopManager;stopManager=function(){pendingStopBefore42();pendingManagerRequest42++;pendingManagerContext42='';pendingManagerCache42.clear();};
 const pendingControls42=document.createElement('article');pendingControls42.className='card';pendingControls42.hidden=true;pendingControls42.innerHTML='<h3>尚未連結 Google 的訪員</h3><p id="pendingManagerStatus42">這些訪員仍可取得業務王資料；Google 登入只用於日後本人查看。</p>';const pendingRefresh42=makeAction('重新讀取待連結訪員資料',()=>loadPendingManager42(true));pendingControls42.append(pendingRefresh42);document.getElementById('managerVisitors').before(pendingControls42);
 const pendingSwitchBefore42=switchView;switchView=function(view){pendingSwitchBefore42(view);pendingControls42.hidden=!managerAllowed();if(managerAllowed())loadPendingManager42();};
