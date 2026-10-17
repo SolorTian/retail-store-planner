@@ -8,7 +8,7 @@ alter table planner_private.schedule_requests enable row level security;
 revoke all on planner_private.schedule_requests from public,anon,authenticated;
 create or replace function public.planner_schedule(action text,request_id uuid,period text default null,payload jsonb default '{}'::jsonb)
 returns jsonb language plpgsql security definer set search_path='' as $$
-declare r planner_private.schedule_requests%rowtype;today date:=timezone('Asia/Taipei',now())::date;n integer;
+declare r planner_private.schedule_requests%rowtype;cached planner_private.schedule_requests%rowtype;today date:=timezone('Asia/Taipei',now())::date;n integer;
 begin
  if not coalesce(planner_private.active_user(),false) or not coalesce(planner_private.is_admin(),false) then raise exception 'Administrator required' using errcode='42501';end if;
  if request_id is null then raise exception 'Request ID required';end if;
@@ -16,7 +16,10 @@ begin
   if period is null or period!~'^20[0-9]{2}-(0[1-9]|1[0-2])$' or period<to_char(today,'YYYY-MM') or period>to_char(today+interval '3 months','YYYY-MM') then raise exception 'Invalid planning month';end if;
   if not exists(select 1 from public.planner_credentials c where c.owner_id=auth.uid() and c.data->>'verified'='true') then raise exception 'Verified company binding required';end if;
   if (select count(*) from planner_private.schedule_requests where owner_id=auth.uid() and created_at>now()-interval '1 hour')>=20 then raise exception 'Too many requests';end if;
+  perform pg_advisory_xact_lock(hashtextextended('schedule-cache:'||auth.uid()::text||':'||period,0));
+  select q.* into cached from planner_private.schedule_requests q join public.planner_credentials c on c.owner_id=q.owner_id and md5(c.envelope)=q.binding_fingerprint where q.owner_id=auth.uid() and q.period=planner_schedule.period and q.catalog is not null and timezone('Asia/Taipei',q.created_at)::date=today order by q.created_at desc limit 1;
   insert into planner_private.schedule_requests(id,owner_id,period,binding_fingerprint) select request_id,auth.uid(),period,md5(c.envelope) from public.planner_credentials c where c.owner_id=auth.uid() on conflict do nothing;
+  if cached.id is not null then update planner_private.schedule_requests set catalog=cached.catalog,status='ready',updated_at=now() where id=request_id and owner_id=auth.uid() and status='pending';end if;
  end if;
  select * into r from planner_private.schedule_requests q where q.id=request_id and q.owner_id=auth.uid() for update;
  if not found then raise exception 'Request unavailable' using errcode='42501';end if;
@@ -25,7 +28,7 @@ begin
  end if;
  if action='commit' then
   if r.status in ('queued','writing','done','review') then return jsonb_build_object('id',r.id,'status',r.status,'result',r.result);end if;
-  if r.status<>'ready' or r.updated_at<now()-interval '30 minutes' then raise exception 'Reload the company catalogue';end if;
+  if r.status<>'ready' or timezone('Asia/Taipei',r.created_at)::date<>today then raise exception 'Reload the company catalogue';end if;
   if jsonb_typeof(payload->'cells') is distinct from 'array' or jsonb_array_length(payload->'cells')<1 or jsonb_array_length(payload->'cells')>300 then raise exception 'Select 1 to 300 tasks';end if;
   if payload->>'time' is distinct from '08:00' or payload->>'title' is distinct from '常態工作' or coalesce(payload->>'type','') not in ('0','1') then raise exception 'Invalid task settings';end if;
   if exists(select 1 from jsonb_array_elements(payload->'cells') c where coalesce(c->>'date','')!~'^20[0-9]{2}-(0[1-9]|1[0-2])-[0-3][0-9]$' or left(c->>'date',7)<>r.period or (c->>'date')::date<today or not exists(select 1 from jsonb_array_elements(r.catalog->'customers') s where s->>'id'=c->>'store')) then raise exception 'Invalid task date or customer';end if;
@@ -74,7 +77,6 @@ begin
 end;$$;
 revoke all on function public.planner_schedule_worker(text,uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.planner_schedule_worker(text,uuid,jsonb) to service_role;
-
 
 
 
