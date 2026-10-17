@@ -10,7 +10,7 @@ let deviceRestored37=null,deviceRestoring37=false;
 function restoreDevicePage37(){
  if(!cloudUser||!plannerAccessReady()||deviceRestored37===cloudUser.uid||deviceRestoring37)return;
  deviceRestored37=cloudUser.uid;const state=deviceRead37(deviceKey37());if(!state)return;
- const allowed=['map','list','report','work','data','fuel'];if(isPlannerAdmin())allowed.push('admin');
+ const allowed=['map','list','report','work','data','fuel'];if(isPlannerAdmin())allowed.push('admin','schedule');
  if(!allowed.includes(state.view))return;
  deviceRestoring37=true;queueMicrotask(()=>{try{if(!cloudUser||deviceRestored37!==cloudUser.uid||!plannerAccessReady())return;if(/^\d{4}-\d{2}$/.test(state.workPeriod||'')){workPeriod=state.workPeriod;document.getElementById('workMonth').value=workPeriod;connectWorkAccount();}switchView(state.view);}finally{deviceRestoring37=false;}});
 }
