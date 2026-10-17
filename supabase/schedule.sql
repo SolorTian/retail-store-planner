@@ -8,7 +8,7 @@ alter table planner_private.schedule_requests enable row level security;
 revoke all on planner_private.schedule_requests from public,anon,authenticated;
 create or replace function public.planner_schedule(action text,request_id uuid,period text default null,payload jsonb default '{}'::jsonb)
 returns jsonb language plpgsql security definer set search_path='' as $$
-declare r planner_private.schedule_requests%rowtype;cached planner_private.schedule_requests%rowtype;today date:=timezone('Asia/Taipei',now())::date;n integer;
+declare r planner_private.schedule_requests%rowtype;cached planner_private.schedule_requests%rowtype;today date:=timezone('Asia/Taipei',now())::date;n integer;g jsonb;allcells jsonb;plans jsonb;
 begin
  if not coalesce(planner_private.active_user(),false) or not coalesce(planner_private.is_admin(),false) then raise exception 'Administrator required' using errcode='42501';end if;
  if request_id is null then raise exception 'Request ID required';end if;
@@ -29,16 +29,24 @@ begin
  if action='commit' then
   if r.status in ('queued','writing','done','review') then return jsonb_build_object('id',r.id,'status',r.status,'result',r.result);end if;
   if r.status<>'ready' or timezone('Asia/Taipei',r.created_at)::date<>today then raise exception 'Reload the company catalogue';end if;
-  if jsonb_typeof(payload->'cells') is distinct from 'array' or jsonb_array_length(payload->'cells')<1 or jsonb_array_length(payload->'cells')>300 then raise exception 'Select 1 to 300 tasks';end if;
-  if payload->>'time' is distinct from '08:00' or payload->>'title' is distinct from '常態工作' or coalesce(payload->>'type','') not in ('0','1') then raise exception 'Invalid task settings';end if;
-  if exists(select 1 from jsonb_array_elements(payload->'cells') c where coalesce(c->>'date','')!~'^20[0-9]{2}-(0[1-9]|1[0-2])-[0-3][0-9]$' or left(c->>'date',7)<>r.period or (c->>'date')::date<today or not exists(select 1 from jsonb_array_elements(r.catalog->'customers') s where s->>'id'=c->>'store')) then raise exception 'Invalid task date or customer';end if;
-  if payload->>'type'='1' and not exists(select 1 from jsonb_array_elements(r.catalog->'packages') p where p->>'id'=payload->>'package') then raise exception 'Invalid package';end if;
-  if payload->>'type'='0' then
-   if jsonb_typeof(payload->'custom') is distinct from 'array' or jsonb_array_length(payload->'custom')=0 then raise exception 'Choose custom steps';end if;
-   if exists(select 1 from jsonb_array_elements_text(payload->'custom') s where not exists(select 1 from jsonb_array_elements(r.catalog->'custom') p where p->>'id'=s)) then raise exception 'Invalid custom step';end if;
+  plans:=case when payload ? 'groups' then payload->'groups' else jsonb_build_array(payload) end;
+  if jsonb_typeof(plans) is distinct from 'array' or jsonb_array_length(plans)<1 or jsonb_array_length(plans)>10 then raise exception 'Select 1 to 10 workflow groups';end if;
+  allcells:='[]'::jsonb;
+  for g in select value from jsonb_array_elements(plans) loop
+  if jsonb_typeof(g->'cells') is distinct from 'array' or jsonb_array_length(g->'cells')<1 or jsonb_array_length(g->'cells')>300 then raise exception 'Select 1 to 300 tasks';end if;
+  if g->>'time' is distinct from '08:00' or g->>'title' is distinct from '常態工作' or coalesce(g->>'type','') not in ('0','1') then raise exception 'Invalid task settings';end if;
+  if exists(select 1 from jsonb_array_elements(g->'cells') c where coalesce(c->>'date','')!~'^20[0-9]{2}-(0[1-9]|1[0-2])-[0-3][0-9]$' or ((c->>'date')::date>today+6 and left(c->>'date',7)<>r.period) or (c->>'date')::date<today or not exists(select 1 from jsonb_array_elements(r.catalog->'customers') s where s->>'id'=c->>'store')) then raise exception 'Invalid task date or customer';end if;
+  if g->>'type'='1' and not exists(select 1 from jsonb_array_elements(r.catalog->'packages') p where p->>'id'=g->>'package') then raise exception 'Invalid package';end if;
+  if g->>'type'='0' then
+   if jsonb_typeof(g->'custom') is distinct from 'array' or jsonb_array_length(g->'custom')=0 then raise exception 'Choose custom steps';end if;
+   if exists(select 1 from jsonb_array_elements_text(g->'custom') s where not exists(select 1 from jsonb_array_elements(r.catalog->'custom') p where p->>'id'=s)) then raise exception 'Invalid custom step';end if;
   end if;
-  perform pg_advisory_xact_lock(hashtextextended('schedule:'||auth.uid()::text||':'||r.period,0));
-  if exists(select 1 from planner_private.schedule_requests q where q.owner_id=auth.uid() and q.period=r.period and q.id<>r.id and q.status in ('queued','writing','review')) then raise exception 'Another request is running or needs review';end if;
+   allcells:=allcells||(g->'cells');
+  end loop;
+  if jsonb_array_length(allcells)>300 then raise exception 'Select 1 to 300 tasks';end if;
+  if exists(select 1 from jsonb_array_elements(allcells) c group by c->>'date',c->>'store' having count(*)>1) then raise exception 'Duplicate customer and date across groups';end if;
+  perform pg_advisory_xact_lock(hashtextextended('schedule:'||auth.uid()::text,0));
+  if exists(select 1 from planner_private.schedule_requests q where q.owner_id=auth.uid() and q.id<>r.id and q.status in ('queued','writing','review')) then raise exception 'Another request is running or needs review';end if;
   update planner_private.schedule_requests set plan=payload,status='queued',dispatch_until=null,approved_at=now(),updated_at=now() where id=r.id returning * into r;
  elsif action not in ('prepare','status') then raise exception 'Invalid action';end if;
  return jsonb_build_object('id',r.id,'period',r.period,'status',r.status,'catalog',r.catalog,'result',r.result,'updatedAt',r.updated_at);
@@ -68,6 +76,8 @@ begin
   return jsonb_build_object('claimed',true,'owner',r.owner_id,'envelope',c.envelope,'accountLabel',c.account_label,'period',r.period,'mode',case when r.status='pending' then 'read' else 'write' end,'plan',r.plan);
  elsif action='catalog' and r.status='reading' then
   update planner_private.schedule_requests set catalog=payload,status='ready',updated_at=now(),dispatch_until=null where id=r.id;
+ elsif action='progress' and r.status='writing' then
+  update planner_private.schedule_requests set result=payload,updated_at=now() where id=r.id;
  elsif action='finish' and r.status='writing' then
   update planner_private.schedule_requests set result=payload,status=case when payload->>'verified'='true' then 'done' else 'review' end,updated_at=now() where id=r.id;
  elsif action='fail' and r.status in ('reading','writing') then

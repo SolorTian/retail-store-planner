@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "test": "node --test ui.cjs && node cache.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0",
+    "@electric-sql/pglite": "0.3.7"
+  }
+}

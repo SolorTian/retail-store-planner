@@ -46,8 +46,44 @@ class ScheduleTests(unittest.TestCase):
   calls=[]
   def request(path,body=None):calls.append(body);return path,page(False).encode()
   r=execute(request,'2026-10',USER,plan(),date(2026,10,17));self.assertFalse(r['verified']);self.assertEqual(sum(b is not None for b in calls),1)
+
+
+
+
+
+class GroupTests(unittest.TestCase):
+ def fixture(self,state):
+  h=page(False).replace('</table>','<tr><td>即飲</td><td>第二店</td><td>A</td><td data-val="456-17" data-day="17" data-status="'+('1' if '456' in state else '0')+'"></td></tr></table>')
+  return h.replace('data-val="123-17" data-day="17" data-status="0"','data-val="123-17" data-day="17" data-status="'+('1' if '123' in state else '0')+'"')
+ def groups(self):
+  a=plan();b=plan();b.update(type='0',custom=['1']);b['cells']=[{'store':'456','date':'2026-10-17'}];return {'groups':[a,b]}
+ def test_different_flows_post_once_per_group_and_report_progress(self):
+  state=set();posts=[];progress=[]
+  def request(path,body=None):
+   if body:posts.append(body);state.update(dict(body)['data'].split('-')[0].split(','))
+   return path,self.fixture(state).encode()
+  r=execute(request,'2026-10',USER,self.groups(),date(2026,10,17),progress.append)
+  self.assertTrue(r['verified']);self.assertEqual(r['created'],2);self.assertEqual(len(posts),2);self.assertIn(('task_type','2'),posts[0]);self.assertIn(('task_type','1'),posts[1]);self.assertEqual(progress[-1]['completedGroups'],1)
+ def test_invalid_later_group_does_not_write_first_group(self):
+  posts=[]
+  def request(path,body=None):
+   if body:posts.append(body)
+   return path,self.fixture(set()).encode()
+  p=self.groups();p['groups'][1]['custom']=['bad']
+  with self.assertRaises(ValueError):execute(request,'2026-10',USER,p,date(2026,10,17))
+  self.assertFalse(posts)
+ def test_uncertain_group_stops_later_groups_without_replay(self):
+  posts=[]
+  def request(path,body=None):
+   if body:posts.append(body);raise TimeoutError()
+   return path,self.fixture(set()).encode()
+  r=execute(request,'2026-10',USER,self.groups(),date(2026,10,17));self.assertFalse(r['verified']);self.assertEqual(len(posts),1)
+ def test_duplicate_store_day_across_groups_rejected_before_post(self):
+  p=self.groups();p['groups'][1]['cells']=p['groups'][0]['cells'];posts=[]
+  def request(path,body=None):
+   if body:posts.append(body)
+   return path,self.fixture(set()).encode()
+  with self.assertRaises(ValueError):execute(request,'2026-10',USER,p,date(2026,10,17))
+  self.assertFalse(posts)
+
 if __name__=='__main__':unittest.main()
-
-
-
-

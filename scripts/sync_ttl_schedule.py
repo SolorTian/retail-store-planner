@@ -92,7 +92,7 @@ def validate_plan(plan,catalog,states,today):
   (skipped if states[key] else selected).append(key)
  return selected,skipped
 
-def execute(request,period,user,plan=None,today=None):
+def execute_single(request,period,user,plan=None,today=None):
  path=f"/ubmsys_task/batch/{user['user_id']}/{period}"
  def read():
   url,body=request(path)
@@ -116,6 +116,42 @@ def execute(request,period,user,plan=None,today=None):
  except Exception:confirmed=[]
  verified=len(confirmed)==len(selected)
  return {'verified':verified,'created':len(confirmed),'requested':len(selected),'skipped':len(skipped),'message':'業務王已回讀確認排班。' if verified else '送出結果尚未完整確認，請至業務王核對；系統不會自動重送。','responseInterrupted':post_error}
+
+def execute(request,period,user,plan=None,today=None,progress=None):
+ if plan is None or 'groups' not in plan:return execute_single(request,period,user,plan,today)
+ groups=plan.get('groups',[plan])
+ if not isinstance(groups,list) or not 1<=len(groups)<=10:raise ValueError('Invalid task settings')
+ today=today or datetime.now(ZoneInfo('Asia/Taipei')).date()
+ total=0;seen=set();jobs=[]
+ # Preflight every group and month before the first POST. No malformed later group can cause a partial write.
+ for group in groups:
+  by_month={}
+  for cell in group.get('cells',[]):
+   key=(cell.get('store'),cell.get('date'))
+   if key in seen:raise ValueError('Duplicate task across groups')
+   seen.add(key);total+=1
+   date.fromisoformat(key[1]);target=key[1][:7]
+   if target!=period and not today<=date.fromisoformat(key[1])<=date.fromordinal(today.toordinal()+6):raise ValueError('Unavailable task date or store')
+   by_month.setdefault(target,[]).append(cell)
+  if not by_month:raise ValueError('Invalid task count')
+  for month,cells in by_month.items():
+   _,html=request(f"/ubmsys_task/batch/{user['user_id']}/{month}")
+   catalog,states,_=parse_batch(html.decode('utf-8'),month,user)
+   part={**group,'cells':cells}
+   validate_plan(part,catalog,states,today)
+   jobs.append((month,part))
+ if not 1<=total<=300:raise ValueError('Invalid task count')
+ created=0;skipped=0;finished=0
+ for index,(month,part) in enumerate(jobs):
+  if progress:progress({'message':f'正在上傳第 {index+1}/{len(jobs)} 組，並回讀核對。','completedGroups':finished,'totalGroups':len(jobs),'created':created,'skipped':skipped})
+  try:result=execute_single(request,month,user,part,today)
+  except Exception:
+   return {'verified':False,'created':created,'skipped':skipped,'completedGroups':finished,'totalGroups':len(jobs),'message':'部分工作結果未能確認，已停止後續組別；請至業務王核對，不會自動重送。'}
+  created+=result.get('created',0);skipped+=result.get('skipped',0)
+  if not result.get('verified'):
+   return {**result,'created':created,'skipped':skipped,'completedGroups':finished,'totalGroups':len(jobs),'message':'部分工作結果未能確認，已停止後續組別；請至業務王核對，不會自動重送。'}
+  finished+=1
+ return {'verified':True,'created':created,'skipped':skipped,'completedGroups':finished,'totalGroups':len(jobs),'message':'業務王已回讀確認全部排班。'}
 
 def rpc(action,job_id,payload=None):
  base=os.environ['SUPABASE_URL'];key=os.environ['SUPABASE_SERVICE_ROLE_KEY']
@@ -142,7 +178,7 @@ def main():
   query={'page_status':'on','dept_id':str(user['dept_id']),'group_id':str(user['group_id']),'user_id':str(user['user_id']),'start_day':job['period']+'-01','end_day':job['period']+'-'+str(calendar.monthrange(year,month)[1]),'keyword':''}
   request('/ubmsys_task/batchlists?'+urllib.parse.urlencode(query))
   print('Company identity verified; processing approved request.',flush=True)
-  result=execute(request,job['period'],user,job['plan'] if job['mode']=='write' else None)
+  result=execute(request,job['period'],user,job['plan'] if job['mode']=='write' else None,progress=lambda p:rpc('progress',job_id,p))
   rpc('finish' if job['mode']=='write' else 'catalog',job_id,result)
   print('Schedule request result stored privately.',flush=True)
  except Exception as error:
@@ -152,7 +188,6 @@ def main():
   rpc('fail',job_id)
   raise RuntimeError('Schedule request incomplete; inspect private status, never replay an uncertain write.') from None
 if __name__=='__main__':main()
-
 
 
 
