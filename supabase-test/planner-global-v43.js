@@ -8,7 +8,7 @@ function drawGlobalDaily36(){
  let note=document.getElementById('globalDaily36');
  if(!note){note=document.createElement('p');note.id='globalDaily36';note.className='daily-refresh-note';root.append(note);}
  const s=globalDaily36.state;
- note.textContent=!s?'全站更新由田琰澤當天首次登入開啟時觸發，尚未確認完成。':
+ note.textContent=globalDaily36.error?globalDaily36.error:!s?'全站更新由田琰澤當天首次登入開啟時觸發，尚未確認完成。':
   s.status==='not_started'?'今天尚未由主使用者啟動全員更新。':s.status==='done'?'今天的全站資料已更新完成。':s.status==='no_eligible_accounts'?'今天沒有已驗證綁定的可更新帳戶。':
   s.status==='partial_failure'?'全站更新部分失敗，已完成 '+s.done+'／'+s.total+' 個帳戶。':
   '今天的全站資料更新中：'+s.done+'／'+s.total+' 個帳戶完成。';
@@ -37,7 +37,7 @@ runDailyRefresh=async function(manual=false){
  const uid=cloudUser.uid,key=uid+':'+todayRouteDate();
  if(globalDaily36.key!==key)globalDaily36={key,next:0,busy:false,loaded:false,state:null};
  if(!manual&&Date.now()<globalDaily36.next)return;
- globalDaily36.busy=true;drawGlobalControls40();
+ globalDaily36.busy=true;globalDaily36.error='';drawGlobalControls40();
  try{
   const token=await cloudUser.getIdToken();if(cloudUser?.uid!==uid)return;
   const admin=isPlannerAdmin();
@@ -55,6 +55,7 @@ runDailyRefresh=async function(manual=false){
    globalDaily36.next=globalDaily36.loaded?Infinity:Date.now()+30000;
   }else globalDaily36.next=state.status==='no_eligible_accounts'?Infinity:Date.now()+60000;
  }catch(error){
+  globalDaily36.error='全站更新尚未確認：'+cloudMessage(error);
   globalDaily36.next=Date.now()+60000;
   if(cloudUser?.uid===uid)updateCloudUi('全站更新尚未確認：'+cloudMessage(error));
  }finally{globalDaily36.busy=false;drawGlobalDaily36();drawGlobalControls40();}
@@ -77,7 +78,7 @@ function drawGlobalControls40(){
  const allowed=isPlannerAdmin()&&plannerAccessReady();globalCard40.hidden=!allowed;
  if(!allowed){pendingRows40.replaceChildren();return;}
  globalButton40.disabled=!globalDailyEnabled36()||globalDaily36.busy||globalDaily36.state?.status==='pending';
- const s=globalDaily36.state;globalMessage40.textContent=!globalDailyEnabled36()?'後端尚未啟用，尚不能更新全員資料。':globalDaily36.busy?'正在確認全員更新狀態…':!s?'每天由主使用者首次開站啟動，其他成員使用已更新資料。':s.status==='done'?'全員更新完成：'+s.done+'／'+s.total+' 位':s.status==='partial_failure'?'更新部分失敗：完成 '+s.done+'／'+s.total+' 位，可按按鈕重試。':s.status==='not_started'?'今天尚未啟動全員更新。':s.status==='no_eligible_accounts'?'沒有可更新的綁定帳戶。':'全員更新進行中：'+s.done+'／'+s.total+' 位。';
+ const s=globalDaily36.state;globalMessage40.textContent=!globalDailyEnabled36()?'後端尚未啟用，尚不能更新全員資料。':globalDaily36.busy?'正在確認全員更新狀態…':globalDaily36.error?globalDaily36.error:!s?'每天由主使用者首次開站啟動，其他成員使用已更新資料。':s.status==='done'?'全員更新完成：'+s.done+'／'+s.total+' 位':s.status==='partial_failure'?'更新部分失敗：完成 '+s.done+'／'+s.total+' 位，可按按鈕重試。':s.status==='not_started'?'今天尚未啟動全員更新。':s.status==='no_eligible_accounts'?'沒有可更新的綁定帳戶。':'全員更新進行中：'+s.done+'／'+s.total+' 位。';
 }
 let pendingListKey40='';
 async function loadPendingVisitors40(){
@@ -98,5 +99,6 @@ drawGlobalControls40();
 releaseButton.textContent='v1.43';releaseButton.setAttribute('aria-label','版本 v1.43，查看更新紀錄');const release43=document.createElement('article');release43.className='release-entry';release43.innerHTML='<b>v1.43</b><time>2026-10-17</time><p>啟用管理總覽的一鍵更新全部訪員資料；每天由主使用者首次開站啟動全員背景更新，一般成員使用已更新資料並可自行手動更新。納入尚未連結 Google 的業務王訪員，之後由管理員連結已驗證的 Google 成員。顯示實際完成／失敗狀態，背景更新不重排已安排路線。</p>';releaseHistory.querySelector('h2').after(release43);
 
 const globalManagerDraw40=renderManagerOverview;renderManagerOverview=function(){globalManagerDraw40();if(managerAllowed())loadPendingVisitors40();};
+
 
 
