@@ -149,6 +149,7 @@ class ExportStageFailure(Exception):
         self.stage, self.kind = stage, kind
 
 def export_stage(stage, operation):
+    print('Daily export stage: '+stage,flush=True)
     try:
         return operation()
     except Exception as error:
@@ -167,8 +168,11 @@ def export_job(job, private_key):
     for value in (account,password):
         print('::add-mask::'+value.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
     anchor = date.fromisoformat(job['day'])
-    customers = export_stage('customers',lambda:parse_customers(download_customers(account,password)))
+    customers = export_stage('customers',lambda:parse_customers(download_customers(account,password),owner_staff=account.split('@')[0] if job.get('kind')=='pending_google' else None))
     visits = export_stage('visits',lambda:parse_items(download_report(account,password,anchor.year)))
+    if job.get('kind')=='pending_google':
+        owned_codes={row['code'] for row in customers}
+        visits=[row for row in visits if row['code'] in owned_codes]
     work = export_stage('work',lambda:parse_work(download_work(account,password,anchor.year,anchor.month)))
     start, _ = work_range(anchor.year,anchor.month)
     fuels = {}

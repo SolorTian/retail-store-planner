@@ -22,7 +22,9 @@ def download_customers(account, password):
         raise ValueError('Customer export is not an XLSX workbook')
     return data
 
-def parse_customers(data):
+def parse_customers(data, owner_staff=None):
+    if owner_staff is not None and not re.fullmatch(r'[0-9]{4,12}',owner_staff):
+        raise ValueError('Invalid owner staff')
     workbook = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     try:
         rows = list(workbook.active.values)
@@ -35,6 +37,10 @@ def parse_customers(data):
         by_code = {}
         for row in rows[h + 1:]:
             item = {k: str(row[i] or '').strip() for k, i in indices.items()}
+            # A company-only account can receive a multi-owner roster. Select its
+            # exact employee number before deduplication; never pick the last owner.
+            if owner_staff is not None and not re.search(r'(?:^|[-－])'+re.escape(owner_staff)+r'$',item['owner']):
+                continue
             if len(row) > 11 and '結束營業' in re.sub(r'\s+', '', str(row[11] or '')):
                 item['status'] = '結束營業'
             if not item['code']:
@@ -55,7 +61,7 @@ def parse_customers(data):
                 raise ValueError('Conflicting duplicate customer code')
             by_code[item['code']] = item
         if not by_code:
-            raise ValueError('Empty customer roster')
+            raise ValueError('No customers assigned to company account' if owner_staff is not None else 'Empty customer roster')
         return list(by_code.values())
     finally:
         workbook.close()
