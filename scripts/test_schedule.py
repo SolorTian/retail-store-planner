@@ -15,6 +15,9 @@ class ScheduleTests(unittest.TestCase):
  def test_form_identity_and_company_catalogue(self):
   catalog,states,hidden=parse_batch(page(),'2026-10',USER);self.assertEqual(catalog['customers'][0]['name'],'示範餐廳');self.assertEqual(hidden[0],('op','add'));self.assertFalse(states[('123','2026-10-17')])
   with self.assertRaises(ValueError):parse_batch(page(),'2026-10',{'user_id':'8','user_name':'別人'})
+ def test_matrix_outside_settings_form_is_supported(self):
+  html=page().replace('<table>','</form><table>').replace('</table></form>','</table>')
+  c,s,h=parse_batch(html,'2026-10',USER);self.assertEqual(len(c['customers']),1);self.assertEqual(c['customers'][0]['id'],'123')
  def test_selected_cells_deduplicated_and_existing_skipped(self):
   c,s,_=parse_batch(page(),'2026-10',USER);p=plan();p['cells']*=2;self.assertEqual(len(validate_plan(p,c,s,date(2026,10,17))[0]),1);s[('123','2026-10-17')]=True;self.assertEqual(len(validate_plan(p,c,s,date(2026,10,17))[1]),1)
  def test_invalid_date_store_workflow_never_accepted(self):
@@ -42,5 +45,6 @@ class ScheduleTests(unittest.TestCase):
   def request(path,body=None):calls.append(body);return path,page(False).encode()
   r=execute(request,'2026-10',USER,plan(),date(2026,10,17));self.assertFalse(r['verified']);self.assertEqual(sum(b is not None for b in calls),1)
 if __name__=='__main__':unittest.main()
+
 
 

@@ -47,9 +47,12 @@ def parse_batch(html,period,user):
  if not required.issubset(selects):raise ValueError('Batch form changed')
  def options(name):return [{'id':o.a.get('value',''),'name':o.text()} for o in selects[name].all('option') if o.a.get('value')]
  people=options('user_ids[]')
- if not any(user['user_name'] in row.text() for row in form.all('tr') if len([n for n in row.children if isinstance(n,Node) and n.tag=='td'])==1):raise ValueError('Batch employee mismatch')
+ tables=[t for t in tree.all('table') if any(td.a.get('data-val') for td in t.all('td'))]
+ if len(tables)!=1:raise ValueError('Batch matrix changed')
+ matrix=tables[0]
+ if not any(user['user_name'] in row.text() for row in matrix.all('tr') if len([n for n in row.children if isinstance(n,Node) and n.tag=='td'])==1):raise ValueError('Batch employee mismatch')
  customers=[];states={}
- for row in form.all('tr'):
+ for row in matrix.all('tr'):
   cells=[n for n in row.children if isinstance(n,Node) and n.tag=='td'];days=[c for c in cells if c.a.get('data-val')]
   if not days:continue
   identities={c.a['data-val'].split('-')[0] for c in days}
@@ -142,6 +145,7 @@ def main():
   rpc('fail',job_id)
   raise RuntimeError('Schedule request incomplete; inspect private status, never replay an uncertain write.') from None
 if __name__=='__main__':main()
+
 
 
 
