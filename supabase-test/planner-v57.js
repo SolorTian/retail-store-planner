@@ -1,0 +1,5 @@
+// Active members schedule only their own bound company account; backend enforces ownership.
+allowedSchedule45=function(){return plannerAccessReady()&&!!cloudUser?.uid;};
+const navBefore57=navState49;navState49=function(){navBefore57();const admin=more49.querySelector('[data-view=admin]');if(admin)admin.hidden=!(plannerAccessReady()&&isPlannerAdmin());};
+const typesBefore57=loadAllTypes53;loadAllTypes53=async function(){if(!allowedSchedule45())return;if(isPlannerAdmin())return typesBefore57();resetTypes53();typeOwner53=cloudUser.uid;allTypes53=ownTypes53();typeDay53=todayRouteDate();typeStatus53='本人的客戶店家型態 · '+allTypes53.length+' 種';};
+releaseButton.textContent='v1.57';releaseButton.setAttribute('aria-label','版本 v1.57，查看更新紀錄');const entry57=document.createElement('article');entry57.className='release-entry';entry57.innerHTML='<b>v1.57</b><time>2026-10-19</time><p>批次排班開放已授權訪員使用，各自讀取已綁定的業務王名單並為本人安排工作。排班請求、草稿及上傳紀錄依帳號隔離；管理總覽仍僅限管理者。</p>';releaseHistory.querySelector('h2').after(entry57);scheduleContext45();navState49();if(activeView==='schedule'){drawPlanningStores51();drawPlanningRoute51();queueRouteSync56();}

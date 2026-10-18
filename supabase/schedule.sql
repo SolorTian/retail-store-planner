@@ -22,7 +22,8 @@ create or replace function public.planner_schedule(action text,request_id uuid,p
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare r planner_private.schedule_requests%rowtype;cached planner_private.schedule_requests%rowtype;today date:=timezone('Asia/Taipei',now())::date;n integer;g jsonb;allcells jsonb;plans jsonb;
 begin
- if not coalesce(planner_private.active_user(),false) or not coalesce(planner_private.is_admin(),false) then raise exception 'Administrator required' using errcode='42501';end if;
+ if not coalesce(planner_private.active_user(),false) then raise exception 'Active member required' using errcode='42501';end if;
+ if not exists(select 1 from public.planner_credentials c where c.owner_id=auth.uid() and c.data->>'verified'='true') then raise exception 'Verified company binding required' using errcode='42501';end if;
  if request_id is null then raise exception 'Request ID required';end if;
  if action='prepare' then
   if period is null or period!~'^20[0-9]{2}-(0[1-9]|1[0-2])$' or period<to_char(today,'YYYY-MM') or period>to_char(today+interval '3 months','YYYY-MM') then raise exception 'Invalid planning month';end if;
@@ -35,6 +36,7 @@ begin
  end if;
  select * into r from planner_private.schedule_requests q where q.id=request_id and q.owner_id=auth.uid() for update;
  if not found then raise exception 'Request unavailable' using errcode='42501';end if;
+ if not exists(select 1 from public.planner_credentials c where c.owner_id=auth.uid() and c.data->>'verified'='true' and md5(c.envelope)=r.binding_fingerprint) then raise exception 'Binding unavailable or changed' using errcode='42501';end if;
  if action='status' and r.status in ('reading','writing') and r.started_at<now()-interval '15 minutes' then
   update planner_private.schedule_requests set status=case when r.status='writing' then 'review' else 'error' end,result=jsonb_build_object('message','工作逾時，請至業務王核對；不會自動重送排班。'),updated_at=now() where id=r.id returning * into r;
  end if;
@@ -74,7 +76,7 @@ begin
  select * into r from planner_private.schedule_requests q where q.id=request_id for update;
  if not found then raise exception 'Request unavailable';end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',r.owner_id,'role','authenticated')::text,true);
- if not coalesce(planner_private.active_user(),false) or not coalesce(planner_private.is_admin(),false) then raise exception 'Administrator no longer active' using errcode='42501';end if;
+ if not coalesce(planner_private.active_user(),false) then raise exception 'Member no longer active' using errcode='42501';end if;
  if action='dispatch' then
   if r.status not in ('pending','queued') or r.dispatch_until>now() then return jsonb_build_object('dispatch',false);end if;
   update planner_private.schedule_requests set dispatch_until=now()+interval '2 minutes' where id=r.id;
@@ -99,7 +101,3 @@ begin
 end;$$;
 revoke all on function public.planner_schedule_worker(text,uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.planner_schedule_worker(text,uuid,jsonb) to service_role;
-
-
-
-
