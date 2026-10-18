@@ -6,6 +6,18 @@ create table if not exists planner_private.schedule_requests(
 );
 alter table planner_private.schedule_requests enable row level security;
 revoke all on planner_private.schedule_requests from public,anon,authenticated;
+-- Owner- and company-binding-scoped evidence from verified scheduling jobs only.
+create or replace function planner_private.schedule_confirmed_cells(p_owner uuid,p_binding text)
+returns jsonb language sql stable set search_path='' as $$
+ select coalesce(jsonb_agg(distinct jsonb_build_object('date',cell->>'date','store',cell->>'store')),'[]'::jsonb)
+ from planner_private.schedule_requests q
+ join public.planner_credentials credential on credential.owner_id=q.owner_id and md5(credential.envelope)=q.binding_fingerprint
+ cross join lateral jsonb_array_elements(case when q.plan ? 'groups' then q.plan->'groups' else jsonb_build_array(q.plan) end) workflow
+ cross join lateral jsonb_array_elements(workflow->'cells') cell
+ where q.owner_id=p_owner and q.binding_fingerprint=p_binding and q.status='done' and q.result->>'verified'='true'
+ and cell->>'date'>=to_char(timezone('Asia/Taipei',now())::date,'YYYY-MM-DD');
+$$;
+revoke all on function planner_private.schedule_confirmed_cells(uuid,text) from public,anon,authenticated;
 create or replace function public.planner_schedule(action text,request_id uuid,period text default null,payload jsonb default '{}'::jsonb)
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare r planner_private.schedule_requests%rowtype;cached planner_private.schedule_requests%rowtype;today date:=timezone('Asia/Taipei',now())::date;n integer;g jsonb;allcells jsonb;plans jsonb;
@@ -27,7 +39,7 @@ begin
   update planner_private.schedule_requests set status=case when r.status='writing' then 'review' else 'error' end,result=jsonb_build_object('message','工作逾時，請至業務王核對；不會自動重送排班。'),updated_at=now() where id=r.id returning * into r;
  end if;
  if action='commit' then
-  if r.status in ('queued','writing','done','review') then return jsonb_build_object('id',r.id,'status',r.status,'result',r.result);end if;
+  if r.status in ('queued','writing','done','review') then return jsonb_build_object('id',r.id,'status',r.status,'result',r.result,'confirmedCells',planner_private.schedule_confirmed_cells(r.owner_id,r.binding_fingerprint));end if;
   if r.status<>'ready' or timezone('Asia/Taipei',r.created_at)::date<>today then raise exception 'Reload the company catalogue';end if;
   plans:=case when payload ? 'groups' then payload->'groups' else jsonb_build_array(payload) end;
   if jsonb_typeof(plans) is distinct from 'array' or jsonb_array_length(plans)<1 or jsonb_array_length(plans)>10 then raise exception 'Select 1 to 10 workflow groups';end if;
@@ -49,7 +61,7 @@ begin
   if exists(select 1 from planner_private.schedule_requests q where q.owner_id=auth.uid() and q.id<>r.id and q.status in ('queued','writing','review')) then raise exception 'Another request is running or needs review';end if;
   update planner_private.schedule_requests set plan=payload,status='queued',dispatch_until=null,approved_at=now(),updated_at=now() where id=r.id returning * into r;
  elsif action not in ('prepare','status') then raise exception 'Invalid action';end if;
- return jsonb_build_object('id',r.id,'period',r.period,'status',r.status,'catalog',r.catalog,'result',r.result,'updatedAt',r.updated_at);
+ return jsonb_build_object('id',r.id,'period',r.period,'status',r.status,'catalog',r.catalog,'result',r.result,'updatedAt',r.updated_at,'confirmedCells',planner_private.schedule_confirmed_cells(r.owner_id,r.binding_fingerprint));
 end;$$;
 revoke all on function public.planner_schedule(text,uuid,text,jsonb) from public,anon;
 grant execute on function public.planner_schedule(text,uuid,text,jsonb) to authenticated;
@@ -87,6 +99,7 @@ begin
 end;$$;
 revoke all on function public.planner_schedule_worker(text,uuid,jsonb) from public,anon,authenticated;
 grant execute on function public.planner_schedule_worker(text,uuid,jsonb) to service_role;
+
 
 
 
