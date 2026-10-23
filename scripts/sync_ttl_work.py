@@ -17,6 +17,7 @@ FIELDS = {
  'gpsCheckInAt':['到點GPS時間'],
  'completedAt':['工作完成日期'], 'checkOutAt':['離站時間','退卡時間'],
  'status':['任務狀態'], 'readStatus':['APP讀取狀態'], 'subject':['工作主題'], 'note':['備註'],
+ 'workflow':['工作流程','工作流程名稱','執行工作','問卷名稱','工作內容'],
  'signalValue':['是否衛星訊號異常','衛星訊號異常'], 'signalAbnormal':['是否衛星訊號異常','衛星訊號異常'], 'deviceFlag':['是否刷機'],
  'offsetAbnormal':['是否打卡偏移','是否偏移','打卡偏移'],
  'checkInLat':['打卡緯度','到站緯度'], 'checkInLng':['打卡經度','到站經度'],
