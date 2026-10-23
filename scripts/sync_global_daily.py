@@ -168,14 +168,18 @@ def export_job(job, private_key):
     for value in (account,password):
         print('::add-mask::'+value.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
     anchor = date.fromisoformat(job['day'])
-    customers = export_stage('customers',lambda:parse_customers(download_customers(account,password),owner_staff=account.split('@')[0] if job.get('kind')=='pending_google' else None))
+    # Google linking does not change the company's multi-owner export scope.
+    # Use the verified company identity for regular and pending profiles alike.
+    staff = account.split('@',1)[0] if re.fullmatch(r'[0-9]{4,12}@ttl\.com',account,re.I) else None
+    if job.get('kind')=='pending_google' and staff is None:
+        raise ValueError('Invalid pending company account')
+    customers = export_stage('customers',lambda:parse_customers(download_customers(account,password),owner_staff=staff))
     visits = export_stage('visits',lambda:parse_items(download_report(account,password,anchor.year)))
-    if job.get('kind')=='pending_google':
+    if staff is not None:
         owned_codes={row['code'] for row in customers}
         visits=[row for row in visits if row['code'] in owned_codes]
-    work = export_stage('work',lambda:parse_work(download_work(account,password,anchor.year,anchor.month,owner_staff=account.split('@')[0] if job.get('kind')=='pending_google' else None)))
-    if job.get('kind')=='pending_google':
-        staff=account.split('@')[0]
+    work = export_stage('work',lambda:parse_work(download_work(account,password,anchor.year,anchor.month,owner_staff=staff)))
+    if staff is not None:
         work={**work,'items':[row for row in work['items'] if re.search(r'(?:^|[-－])'+re.escape(staff)+r'$',str(row.get('owner','')).strip())]}
     start, _ = work_range(anchor.year,anchor.month)
     fuels = {}
