@@ -7,7 +7,7 @@ progressChart59=function(metrics,label,choose){
   if(count&&metrics.needed){const segment=makeAction('',()=>choose(id));segment.className='progress-segment60';segment.style.width=(count/metrics.needed*100)+'%';segment.style.background=color;segment.setAttribute('aria-label',label+' · '+title+' '+count+' 家，按下查看');track.append(segment);}
   const b=makeAction(title+' '+count+' 家',()=>choose(id));b.className='progress-key60';b.style.setProperty('--segment',color);legend.append(b);
  }
- wrap.append(track,legend);return wrap;
+ const rate=metrics.unknown?'資料尚待同步':metrics.needed?Math.round(metrics.met/metrics.needed*100)+'% 達標':'尚無應訪';wrap.append(el58('div',rate,'progress-rate60'),track,legend);return wrap;
 };
 const progressDrawBefore60=drawProgress59;
 drawProgress59=function(){progressDrawBefore60();if(!admin58()||activeView!=='progress')return;const hint=q58('progressSummary59').querySelector('.progress-summary-info59 .notice');if(hint)hint.textContent='點選缺訪數或進度條，逐層查看訪員與缺訪店家。';};
@@ -17,7 +17,7 @@ for(const b of progressNav59)if(b.closest('.more-grid49'))b.innerHTML=icon49('pr
 // Add actual synchronized questionnaire names inside the personal work detail and evidence drawers.
 function questionnaireBlock60(row){
  const box=el58('section','','questionnaires60');box.append(el58('h4','工作／問卷'));
- const names=workflows58(row);if(names.length){const list=el58('ul');for(const name of names)list.append(el58('li',name));box.append(list);}else box.append(el58('p','問卷名稱尚未同步，請更新工作資料。','notice'));
+ const names=workflows58(row).flatMap(s=>s.split(/[,，]/)).map(s=>s.trim()).filter(Boolean);if(names.length){const list=el58('ul');for(const name of names)list.append(el58('li',name));box.append(list);}else box.append(el58('p','問卷名稱尚未同步，請更新工作資料。','notice'));
  return box;
 }
 function fillWorkQuestionnaires60(analysis){
@@ -58,6 +58,7 @@ const modalBefore60=openModal;openModal=function(id){if([globalSettings58.id,his
 const routeColumn60=document.querySelector('#panel-map .maplayout>div');routeColumn60.classList.add('route-map-column60');
 const style60=el58('style');style60.textContent=`
 .settings-shortcuts59{grid-column:1/-1;gap:12px}.settings-shortcuts59>.settings-entry58{width:100%;box-sizing:border-box}
+.progress-rate60{font-size:13px;font-weight:600;margin-bottom:8px;color:var(--green)}.progress-summary59 .progress-rate60{display:none}
 .settings-actions58[hidden],.settings-actions58.hide{display:none!important}
 .progress-summary59{grid-template-columns:minmax(230px,.8fr) minmax(280px,1.2fr);gap:32px}.progress-summary-info59 h3{margin:6px 0 10px}.progress-summary-info59 .progress-gap59{margin:8px 0}
 .progress-cards59{display:flex;flex-direction:column;gap:10px}.progress-group59{display:grid;grid-template-columns:minmax(130px,.85fr) minmax(200px,1.5fr) minmax(155px,.8fr) 115px;text-align:left;align-items:center;gap:22px;padding:18px 22px}.progress-group59 h3{font-size:16px}.progress-group59>.primary{margin:0;font-size:13px;min-height:40px}.progress-group59>.progress-gap59{font-size:13px;margin:0;text-align:right}
