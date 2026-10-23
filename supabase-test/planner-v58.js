@@ -5,7 +5,7 @@ function drawer58(id,title,node){const modal=el58('div','','modal credential-dra
 const settingsActions58=el58('div','','settings-actions58');q58('panel-data').append(settingsActions58);
 const ruleAnchor58=el58('button','店點與拜訪設定 →','settings-entry58');ruleAnchor58.type='button';ruleCard.before(ruleAnchor58);const ruleDrawer58=drawer58('storeRulesDrawer58','店點與拜訪設定',ruleCard);ruleAnchor58.onclick=()=>{if(!plannerAccessReady())return;inlineRules.open=true;refreshInlineRules();openModal(ruleDrawer58.id);};
 openRules=function(){if(!plannerAccessReady())return;inlineRulesDraft();inlineRules.open=true;openModal(ruleDrawer58.id);};
-const modalBefore58=openModal;openModal=function(id){if(id==='rulesModal'){ruleAnchor58.onclick();return;}modalBefore58(id);};
+const modalBefore58=openModal;openModal=function(id){if(id==='rulesModal'){inlineRules.open=true;return;}modalBefore58(id);};
 function settingTool58(title,node,action){const modal=drawer58('settings'+settingsActions58.children.length+'Drawer58',title,node),button=makeAction(title+' →',()=>{if(!admin58())return;openModal(modal.id);action?.();});button.className='settings-entry58';settingsActions58.append(button);return modal;}
 const globalSettings58=settingTool58('全員資料更新與帳號連結',globalCard40,()=>{drawGlobalControls40();pendingListKey40='';loadPendingVisitors40();});
 const historySettings58=settingTool58('登入紀錄',managerHistory,()=>{managerHistory.open=true;adminCard.classList.remove('hide');loadAdminHistory();});
