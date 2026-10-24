@@ -4,7 +4,7 @@
   "sourceName": "台灣中油95無鉛汽油歷史牌價",
   "method": "daily_weighted",
   "asOf": "2026-10-24",
-  "fetchedAt": "2026-10-24T20:34:23.858608+08:00",
+  "fetchedAt": "2026-10-24T20:42:16.699847+08:00",
   "latestEffectiveDate": "2026-10-19",
   "months": {
     "2020-02": {
