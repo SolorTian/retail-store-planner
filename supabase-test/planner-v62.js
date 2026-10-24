@@ -42,7 +42,7 @@ drawCustomerDirectory61=function(){
 };
 typeSelect62.onchange=()=>{customerLimit61=80;drawCustomerDirectory61();};
 const managerAllowedBefore62=managerAllowed;managerAllowed=function(){return managerAllowedBefore62()||admin58()&&activeView==='data';};
-const managerRenderBefore62=renderManagerOverview;renderManagerOverview=function(){managerRenderBefore62();if(activeView==='data'&&admin58())drawCustomerDirectory61();};
+const managerRenderBefore62=renderManagerOverview;renderManagerOverview=function(){if(activeView==='data'){if(admin58())drawCustomerDirectory61();return;}return managerRenderBefore62();};
 function guardDirectory62(){const allowed=admin58();customerSection62.hidden=!allowed;if(!allowed){q58('customerList61').replaceChildren();delete q58('customerList61').dataset.signature62;typeSelect62.replaceChildren();q58('customerLoad61').textContent='';q58('customerCount61').textContent='';}else if(activeView==='data')connectManager();}
 const gateBefore62=refreshAccountGate;refreshAccountGate=function(){gateBefore62();guardDirectory62();};
 const switchBefore62=switchView;switchView=function(view){switchBefore62(view);guardDirectory62();if(view==='data'&&admin58()){connectManager();loadPendingManager42();drawCustomerDirectory61();}};
