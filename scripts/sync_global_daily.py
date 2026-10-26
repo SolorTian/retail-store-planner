@@ -34,6 +34,22 @@ def rpc(action, day, **params):
         # The response/request may contain credentials or records; never log it.
         raise RuntimeError('Daily database operation failed') from None
 
+def rpc_scheduled_open():
+    # Same trusted server credentials; no browser session or caller-selected date.
+    url = os.environ['SUPABASE_URL'].rstrip('/')
+    if url != 'https://kzzyeoehfbvslxfcyayi.supabase.co':
+        raise ValueError('Unexpected database')
+    key = os.environ['SUPABASE_SERVICE_ROLE_KEY']
+    req = urllib.request.Request(url + '/rest/v1/rpc/planner_daily_scheduled_open',
+        data=b'{}', headers={'apikey': key,
+        **({} if key.startswith('sb_secret_') else {'Authorization': 'Bearer ' + key}),
+        'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as response:
+            return json.load(response)
+    except (urllib.error.HTTPError, urllib.error.URLError):
+        raise RuntimeError('Scheduled batch initialization failed') from None
+
 def decrypt_binding(job, private_key):
     blob = json.loads(job['envelope'])
     decode = lambda value: base64.b64decode(value, validate=True)
@@ -194,7 +210,11 @@ def export_job(job, private_key):
 def main():
     if os.environ.get('GITHUB_REPOSITORY')!='SolorTian/retail-store-planner' or os.environ.get('GITHUB_REF')!='refs/heads/main':
         raise ValueError('Trusted main workflow required')
-    day = date.fromisoformat(os.environ['BATCH_DAY']).isoformat()
+    if os.environ.get('GITHUB_EVENT_NAME') == 'schedule' or not os.environ.get('BATCH_DAY'):
+        state = rpc_scheduled_open()
+        day = date.fromisoformat(state['day']).isoformat()
+    else:
+        day = date.fromisoformat(os.environ['BATCH_DAY']).isoformat()
     private_key = serialization.load_pem_private_key(os.environ['TTL_CREDENTIAL_PRIVATE_KEY'].encode(),password=None)
     deadline = time.monotonic()+150*60
     while time.monotonic()<deadline:

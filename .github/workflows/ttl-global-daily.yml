@@ -1,11 +1,14 @@
-name: User-triggered global daily refresh
-run-name: planner-daily-${{ inputs.batch_day }}
+name: Global daily refresh · 07:50 Taiwan
+run-name: planner-daily-${{ inputs.batch_day || 'scheduled-taiwan-day' }}
 on:
+  schedule:
+    # Taiwan 07:50 = previous UTC day 23:50.
+    - cron: '50 23 * * *'
   workflow_dispatch:
     inputs:
       batch_day:
-        description: Server-created Taiwan date; cannot create a batch here
-        required: true
+        description: Leave empty to initialize today's Taiwan batch; existing date resumes only
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -13,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   refresh:
-    if: github.actor == github.repository_owner && github.ref == 'refs/heads/main'
+    if: github.repository == 'SolorTian/retail-store-planner' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.actor == github.repository_owner)
     runs-on: ubuntu-24.04
     timeout-minutes: 160
     steps:
