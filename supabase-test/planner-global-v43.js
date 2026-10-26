@@ -8,8 +8,8 @@ function drawGlobalDaily36(){
  let note=document.getElementById('globalDaily36');
  if(!note){note=document.createElement('p');note.id='globalDaily36';note.className='daily-refresh-note';root.append(note);}
  const s=globalDaily36.state;
- note.textContent=globalDaily36.error?globalDaily36.error:!s?'每天台灣時間 07:50 由後台更新全員資料，不需開啟網頁。':
-  s.status==='not_started'?'今天的排程尚未啟動，預定台灣時間 07:50；可由管理者手動更新。':s.status==='done'?'今天的全站資料已更新完成。':s.status==='no_eligible_accounts'?'今天沒有已驗證綁定的可更新帳戶。':
+ note.textContent=globalDaily36.error?globalDaily36.error:!s?'每天台灣時間 07:00 由後台更新全員資料，不需開啟網頁。':
+  s.status==='not_started'?'今天的排程尚未啟動，預定台灣時間 07:00；可由管理者手動更新。':s.status==='done'?'今天的全站資料已更新完成。':s.status==='no_eligible_accounts'?'今天沒有已驗證綁定的可更新帳戶。':
   s.status==='partial_failure'?'全站更新部分失敗，已完成 '+s.done+'／'+s.total+' 個帳戶。':
   '今天的全站資料更新中：'+s.done+'／'+s.total+' 個帳戶完成。';
 }
@@ -78,7 +78,7 @@ function drawGlobalControls40(){
  const allowed=isPlannerAdmin()&&plannerAccessReady();globalCard40.hidden=!allowed;
  if(!allowed){pendingRows40.replaceChildren();return;}
  globalButton40.disabled=!globalDailyEnabled36()||globalDaily36.busy||globalDaily36.state?.status==='pending';
- const s=globalDaily36.state;globalMessage40.textContent=!globalDailyEnabled36()?'後端尚未啟用，尚不能更新全員資料。':globalDaily36.busy?'正在確認全員更新狀態…':globalDaily36.error?globalDaily36.error:!s?'每天台灣時間 07:50 後台自動更新，無需開啟網頁；仍可手動更新。':s.status==='done'?'全員更新完成：'+s.done+'／'+s.total+' 位':s.status==='partial_failure'?'更新部分失敗：完成 '+s.done+'／'+s.total+' 位，可按按鈕重試。':s.status==='not_started'?'今天尚未啟動全員更新。':s.status==='no_eligible_accounts'?'沒有可更新的綁定帳戶。':'全員更新進行中：'+s.done+'／'+s.total+' 位。';
+ const s=globalDaily36.state;globalMessage40.textContent=!globalDailyEnabled36()?'後端尚未啟用，尚不能更新全員資料。':globalDaily36.busy?'正在確認全員更新狀態…':globalDaily36.error?globalDaily36.error:!s?'每天台灣時間 07:00 後台自動更新，無需開啟網頁；仍可手動更新。':s.status==='done'?'全員更新完成：'+s.done+'／'+s.total+' 位':s.status==='partial_failure'?'更新部分失敗：完成 '+s.done+'／'+s.total+' 位，可按按鈕重試。':s.status==='not_started'?'今天尚未啟動全員更新。':s.status==='no_eligible_accounts'?'沒有可更新的綁定帳戶。':'全員更新進行中：'+s.done+'／'+s.total+' 位。';
 }
 let pendingListKey40='';
 async function loadPendingVisitors40(){
