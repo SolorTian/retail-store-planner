@@ -3,8 +3,8 @@
   "source": "https://vipmbr.cpc.com.tw/mbwebs/showhistoryprice_oil.aspx",
   "sourceName": "台灣中油95無鉛汽油歷史牌價",
   "method": "daily_weighted",
-  "asOf": "2026-10-28",
-  "fetchedAt": "2026-10-28T09:17:20.287123+08:00",
+  "asOf": "2026-10-29",
+  "fetchedAt": "2026-10-29T09:46:50.693159+08:00",
   "latestEffectiveDate": "2026-10-26",
   "months": {
     "2020-02": {
@@ -489,8 +489,8 @@
     },
     "2026-10": {
       "average": 32.7,
-      "days": 28,
-      "through": "2026-10-28",
+      "days": 29,
+      "through": "2026-10-29",
       "complete": false
     }
   }
