@@ -50,11 +50,11 @@ begin
  return planner_private.daily_summary(d)||jsonb_build_object(
  'openedAt',(select opened_at from planner_private.daily_batches where day=d),
  'dispatchedAt',(select dispatched_at from planner_private.daily_batches where day=d),
- 'people',coalesce((select jsonb_agg(jsonb_build_object('name',x.name,'status',x.status,'attempts',x.attempts,'finishedAt',x.finished_at,'error',x.error_code) order by x.name)
+ 'people',coalesce((select jsonb_agg(jsonb_build_object('name',x.name,'account',x.account_label,'status',x.status,'attempts',x.attempts,'finishedAt',x.finished_at,'error',x.error_code) order by x.name)
  from (
- select coalesce(nullif(u.raw_user_meta_data->>'full_name',''),nullif(u.raw_user_meta_data->>'name',''),u.email) as name,j.status,j.attempts,j.finished_at,j.error_code
- from planner_private.daily_jobs j join auth.users u on u.id=j.owner_id where j.day=d
- union all select p.account_label,j.status,j.attempts,j.finished_at,j.error_code from planner_private.daily_pending_jobs j join planner_private.pending_visitors p on p.id=j.owner_id where j.day=d
+ select coalesce(nullif(u.raw_user_meta_data->>'full_name',''),nullif(u.raw_user_meta_data->>'name',''),u.email) as name,c.account_label,j.status,j.attempts,j.finished_at,j.error_code
+ from planner_private.daily_jobs j join auth.users u on u.id=j.owner_id left join public.planner_credentials c on c.owner_id=j.owner_id where j.day=d
+ union all select p.account_label,p.account_label,j.status,j.attempts,j.finished_at,j.error_code from planner_private.daily_pending_jobs j join planner_private.pending_visitors p on p.id=j.owner_id where j.day=d
  ) x),'[]'::jsonb));
 end; $$;
 revoke all on function public.planner_daily_details() from public,anon;
