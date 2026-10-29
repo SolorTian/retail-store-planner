@@ -13,6 +13,6 @@ function parse(text,period){
  rows.push({day,amount,paid,status,periodMatch:day.slice(0,7)===period});}
  if(!rows.length)throw Error('未辨識到紀錄。請從遠通的「通行日期、里程、通行費、狀態」整張表格複製貼上。');return rows;
 }
-function match(rows,items,vehicles,edits){const byDay=new Map(items.map(x=>[x.date,x]));return rows.map(r=>{const item=byDay.get(r.day),old=Number(edits[r.day]?.etag||0);let reason='';if(!r.periodMatch)reason='不屬於目前油料月份';else if(!r.paid)reason=r.amount===0?'沒有已扣款費用':'尚未出帳，待確認實際扣款';else if(!item)reason='當日沒有工作油料紀錄';else if(vehicles[r.day]!=='car')reason='當日不是自用汽車';else if(r.amount===0)reason='本日費用為 0';else if(old===r.amount)reason='已填入相同金額';else if(old!==0)reason='已有手填金額 '+old+' 元，保留原值';return {...r,old,eligible:!reason,reason};});}
+function match(rows,items,vehicles,edits){const byDay=new Map(items.map(x=>[x.date,x]));return rows.map(r=>{const item=byDay.get(r.day),old=Number(edits[r.day]?.etag||0);let reason='';if(!r.periodMatch)reason='不屬於目前油料月份';else if(!item)reason='當日沒有工作油料紀錄';else if(vehicles[r.day]!=='car')reason='當日不是自用汽車';else if(r.amount===0)reason='本日費用為 0';else if(old===r.amount)reason='已填入相同金額';else if(old!==0)reason='已有手填金額 '+old+' 元，保留原值';return {...r,old,eligible:!reason,reason};});}
 root.Fetc66={parse,match};if(typeof module!=='undefined')module.exports=root.Fetc66;
 })(typeof window!=='undefined'?window:globalThis);

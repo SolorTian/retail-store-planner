@@ -1,0 +1,1 @@
+releaseButton.textContent='v1.67';releaseButton.setAttribute('aria-label','版本 v1.67，查看更新紀錄');const release67=el58('article','','release-entry');release67.innerHTML='<b>v1.67</b><time>2026-10-29</time><p>遠通通行費匯入包含未出帳金額，不必等待實際扣款；依通行日比對工作日與自用汽車。保留既有手填金額並避免重複累加。</p>';releaseHistory.querySelector('h2').after(release67);
