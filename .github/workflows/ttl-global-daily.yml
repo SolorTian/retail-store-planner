@@ -1,9 +1,6 @@
-name: Global daily refresh · 07:00 Taiwan
+name: Global daily refresh · first site opening
 run-name: planner-daily-${{ inputs.batch_day || 'scheduled-taiwan-day' }}
 on:
-  schedule:
-    # Taiwan 07:00 = previous UTC day 23:00.
-    - cron: '0 23 * * *'
   workflow_dispatch:
     inputs:
       batch_day:
