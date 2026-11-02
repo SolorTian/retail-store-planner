@@ -17,6 +17,7 @@ begin
  if jsonb_typeof(c) is distinct from 'object' or length(btrim(coalesce(c->>'name',''))) not between 1 and 100 or length(coalesce(c->>'keyword',''))>200 or coalesce(c->>'range','') not in ('recent2','fixed') or coalesce(c->>'requirePhotos','') not in ('true','false') then raise exception 'Invalid project settings';end if;
  if jsonb_typeof(c->'stores') is distinct from 'array' or jsonb_array_length(c->'stores') not between 1 and 500 or jsonb_typeof(c->'surveys') is distinct from 'array' or jsonb_array_length(c->'surveys') not between 1 and 8 then raise exception 'Select stores and questionnaires';end if;
  if exists(select 1 from jsonb_array_elements(c->'stores') x where length(coalesce(x->>'code','')) not between 1 and 150 or length(coalesce(x->>'name','')) not between 1 and 200) or exists(select 1 from jsonb_array_elements(c->'surveys') x where coalesce(x->>'id','')!~'^[0-9]{1,10}$' or length(coalesce(x->>'name','')) not between 1 and 200) then raise exception 'Invalid project targets';end if;
+ if c->>'range'='fixed' and (coalesce(c->>'start','')!~'^[0-9]{4}-[0-9]{2}-[0-9]{2}$' or coalesce(c->>'end','')!~'^[0-9]{4}-[0-9]{2}-[0-9]{2}$') then raise exception 'Date range required';end if;
  if c->>'range'='fixed' and ((c->>'start')::date>(c->>'end')::date or (c->>'end')::date-(c->>'start')::date>365) then raise exception 'Invalid date range';end if;
  perform pg_advisory_xact_lock(hashtextextended('survey-project:'||p_id::text,0));
  select * into p from planner_private.survey_projects where id=p_id for update;
@@ -71,7 +72,7 @@ begin
  update planner_private.survey_projects set result=payload||jsonb_build_object('sourceAt',now(),'start',r.start_day,'end',r.end_day,'configRevision',r.revision),updated_at=now() where id=r.project_id and revision=r.revision and not archived;
  if not found then raise exception 'Project changed during report loading' using errcode='40001';end if;
  end if;
- update planner_private.survey_requests set status='done',token=null,lease_until=null,updated_at=now() where id=r.id;return jsonb_build_object('done',true);
+ update planner_private.survey_requests set status='done',config=null,token=null,lease_until=null,updated_at=now() where id=r.id;return jsonb_build_object('done',true);
 end;$$;
 revoke all on function public.planner_survey_projects(text,uuid,jsonb,bigint),public.planner_survey_request(uuid,uuid),public.planner_survey_status(uuid) from public,anon;
 grant execute on function public.planner_survey_projects(text,uuid,jsonb,bigint),public.planner_survey_request(uuid,uuid),public.planner_survey_status(uuid) to authenticated;
