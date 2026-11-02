@@ -1,0 +1,33 @@
+name: Administrator survey project reports
+run-name: planner-survey-${{ inputs.request_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Server-created administrator request UUID
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: planner-schedule-${{ inputs.request_id }}
+  cancel-in-progress: false
+jobs:
+  report:
+    if: github.actor == github.repository_owner && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install openpyxl==3.1.5 cryptography==46.0.3
+      - name: Read survey metadata without copying photo files
+        env:
+          SUPABASE_URL: https://kzzyeoehfbvslxfcyayi.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PLANNER_DAILY_SERVICE_ROLE_KEY }}
+          TTL_CREDENTIAL_PRIVATE_KEY: ${{ secrets.TTL_CREDENTIAL_PRIVATE_KEY }}
+          SURVEY_REQUEST: ${{ inputs.request_id }}
+        run: python scripts/sync_survey_projects.py
+
+
