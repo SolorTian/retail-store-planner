@@ -38,6 +38,9 @@ def own_user(html,account):
  if len(rows)!=1 or not str(rows[0]['user_id']).isdigit():raise ValueError('Employee identity ambiguous')
  return rows[0]
 
+class MatrixStates(dict):
+ def __init__(self):super().__init__();self.tokens={}
+
 def parse_batch(html,period,user):
  tree=Tree(html).root
  forms=[f for f in tree.all('form') if f.a.get('id')=='dataForm' and any(s.a.get('name')=='user_ids[]' for s in f.all('select'))]
@@ -53,7 +56,7 @@ def parse_batch(html,period,user):
  if len(tables)!=1:raise ValueError('Batch matrix changed')
  matrix=tables[0]
  if not any(user['user_name'] in row.text() for row in matrix.all('tr') if len([n for n in row.children if isinstance(n,Node) and n.tag=='td'])==1):raise ValueError('Batch employee mismatch')
- customers=[];states={}
+ customers=[];states=MatrixStates()
  for row in matrix.all('tr'):
   cells=[n for n in row.children if isinstance(n,Node) and n.tag=='td'];days=[c for c in cells if c.a.get('data-val')]
   if not days:continue
@@ -65,11 +68,12 @@ def parse_batch(html,period,user):
   for cell in days:
    day=int(cell.a.get('data-day','0'));stamp=f'{period}-{day:02d}'
    date.fromisoformat(stamp)
-   if cell.a['data-val']!=store+'-'+str(day) or cell.a.get('data-status') not in ('0','1'):
-    status=cell.a.get('data-status','missing')
-    safe_status=status if re.fullmatch(r'[0-9A-Za-z_-]{1,16}',status) else 'other'
-    print('Batch matrix diagnostic: day='+str(day)+'; status='+safe_status+'; dayKeyMatches='+str(cell.a['data-val']==store+'-'+str(day)),flush=True)
+   token=cell.a['data-val'];parts=token.split('-')
+   if len(parts)!=2 or parts[0]!=store or not re.fullmatch(r'[0-9]{1,2}',parts[1]) or int(parts[1])!=day or cell.a.get('data-status') not in ('0','1'):
+    suffix='-'.join(parts[1:]);suffix=suffix if re.fullmatch(r'[0-9-]{1,20}',suffix) else 'other'
+    print('Batch matrix diagnostic: day='+str(day)+'; keyDay='+suffix,flush=True)
     raise ValueError('Unknown matrix state')
+   states.tokens[(store,stamp)]=token
    states[(store,stamp)]=cell.a['data-status']=='1'
    (existing if states[(store,stamp)] else available).append(stamp)
   customers.append({'id':store,'name':cells[1].text(),'channel':cells[0].text(),'grade':cells[2].text(),'existing':existing,'available':available})
@@ -108,7 +112,7 @@ def execute_single(request,period,user,plan=None,today=None):
  if not selected:return {'verified':True,'created':0,'skipped':len(skipped),'message':'所選日期與店家已有排班，未重複新增。'}
  blocked={'data','user_ids[]','task_str_time','task_type','task_proc_id','task_matter_id[]','task_title'}
  fields=[(k,v) for k,v in hidden if k not in blocked]
- fields.extend([('user_ids[]',str(user['user_id'])),('task_str_time','08:00'),('task_type',catalog['flowValues'][plan['type']]),('task_title','常態工作'),('data',','.join(store+'-'+str(int(day[-2:])) for store,day in selected)+',')])
+ fields.extend([('user_ids[]',str(user['user_id'])),('task_str_time','08:00'),('task_type',catalog['flowValues'][plan['type']]),('task_title','常態工作'),('data',','.join(states.tokens[(store,day)] for store,day in selected)+',')])
  if plan['type']=='1':fields.append(('task_proc_id',plan['package']))
  else:fields.extend(('task_matter_id[]',step) for step in plan['custom'])
  # A write is attempted once. Never repeat POST after a lost/ambiguous response.
