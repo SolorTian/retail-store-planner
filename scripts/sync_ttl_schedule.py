@@ -65,7 +65,11 @@ def parse_batch(html,period,user):
   for cell in days:
    day=int(cell.a.get('data-day','0'));stamp=f'{period}-{day:02d}'
    date.fromisoformat(stamp)
-   if cell.a['data-val']!=store+'-'+str(day) or cell.a.get('data-status') not in ('0','1'):raise ValueError('Unknown matrix state')
+   if cell.a['data-val']!=store+'-'+str(day) or cell.a.get('data-status') not in ('0','1'):
+    status=cell.a.get('data-status','missing')
+    safe_status=status if re.fullmatch(r'[0-9A-Za-z_-]{1,16}',status) else 'other'
+    print('Batch matrix diagnostic: day='+str(day)+'; status='+safe_status+'; dayKeyMatches='+str(cell.a['data-val']==store+'-'+str(day)),flush=True)
+    raise ValueError('Unknown matrix state')
    states[(store,stamp)]=cell.a['data-status']=='1'
    (existing if states[(store,stamp)] else available).append(stamp)
   customers.append({'id':store,'name':cells[1].text(),'channel':cells[0].text(),'grade':cells[2].text(),'existing':existing,'available':available})
