@@ -107,18 +107,33 @@ def main():
    if '/login' in url:raise ValueError('Company session expired')
    result=catalogue(body.decode('utf-8'))
   else:
-   cfg=job['config'];url,body=request('/ubmsys_task/batchlists');user=own_user(body.decode('utf-8'),account);codes={s['code'] for s in cfg['stores']};records={}
-   for survey in cfg['surveys']:
-    todo={1};done=set()
-    while todo-done:
-     page=min(todo-done);query={'page':page,'dept_id':user['dept_id'],'user_id[]':user['user_id'],'filter':'1','sort_mode':'1','daterange':job['start']+' ~ '+job['end'],'survey_name':survey['id']}
-     url,body=request('/ubmsys_report_survey/form/'+survey['id']+'?'+urllib.parse.urlencode(query))
-     if '/login' in url:raise ValueError('Company session expired')
-     rows,pages=parse_report(body.decode('utf-8'),survey,account,job['start'],job['end'],codes)
-     for r in rows:records[r['id']]=r
-     if len(records)>10000:raise ValueError('Too many survey records')
-     done.add(page);todo|=pages
-   result={'records':list(records.values()),'complete':True,'photoStorage':'external_urls_only'}
+   cfg=job['config'];records={};failed=[]
+   raw=json.dumps({'request_id':job_id,'lease':job['lease']}).encode();service=os.environ['SUPABASE_SERVICE_ROLE_KEY']
+   req=urllib.request.Request(os.environ['SUPABASE_URL']+'/rest/v1/rpc/planner_survey_targets',data=raw,headers={'apikey':service,**({} if service.startswith('sb_secret_') else {'Authorization':'Bearer '+service}),'Content-Type':'application/json'})
+   with urllib.request.urlopen(req,timeout=60) as response:bindings=json.load(response)
+   selected={s.get('uid') or job['owner'] for s in cfg['stores']}
+   available={b['owner'] for b in bindings};failed.extend(sorted(selected-available))
+   for binding in bindings:
+    try:
+     person_account,person_password=decrypt_binding(binding,key)
+     for value in (person_account,person_password):print('::add-mask::'+value.replace('%','%25').replace('\r','%0D').replace('\n','%0A'))
+     session=company_session(person_account,person_password);url,body=session('/ubmsys_task/batchlists');user=own_user(body.decode('utf-8'),person_account)
+     codes={s['code'] for s in cfg['stores'] if (s.get('uid') or job['owner'])==binding['owner']}
+     person_rows={}
+     for survey in cfg['surveys']:
+      todo={1};done=set()
+      while todo-done:
+       page=min(todo-done);query={'page':page,'dept_id':user['dept_id'],'user_id[]':user['user_id'],'filter':'1','sort_mode':'1','daterange':job['start']+' ~ '+job['end'],'survey_name':survey['id']}
+       url,body=session('/ubmsys_report_survey/form/'+survey['id']+'?'+urllib.parse.urlencode(query))
+       if '/login' in url:raise ValueError('Company session expired')
+       rows,pages=parse_report(body.decode('utf-8'),survey,person_account,job['start'],job['end'],codes)
+       for row in rows:row['ownerUid']=binding['owner'];person_rows[binding['owner']+':'+row['id']]=row
+       if len(person_rows)+len(records)>10000:raise ValueError('Too many survey records')
+       done.add(page);todo|=pages
+     records.update(person_rows)
+    except Exception as error:
+     failed.append(binding['owner']);print('One selected visitor report incomplete: '+type(error).__name__,flush=True)
+   result={'records':list(records.values()),'complete':not failed,'failedOwners':sorted(set(failed)),'photoStorage':'external_urls_only'}
   rpc('finish',job_id,job['lease'],result);print('Survey report metadata stored privately; no photos copied.')
  except Exception as error:
   safe={'Report table unavailable','Report identity columns changed','Report body unavailable','Report row shape changed','Survey catalogue unavailable','Survey catalogue empty','Company session expired','Report exceeds page limit; narrow the date range'}
