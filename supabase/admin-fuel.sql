@@ -8,7 +8,7 @@ declare directory jsonb;person jsonb;source jsonb;draft jsonb;binding jsonb;labe
 begin
  if not coalesce(planner_private.active_user(),false) or not coalesce(planner_private.is_admin(),false) then raise exception 'Primary administrator required' using errcode='42501';end if;
  directory:=public.planner_account_directory();
- if action='directory' then return coalesce((select jsonb_agg(jsonb_build_object('uid',p->>'uid','name',coalesce(p->>'name',p->>'accountLabel'),'accountLabel',p->>'accountLabel')) from jsonb_array_elements(directory) p where p->>'active'='true' and coalesce(p->>'accountLabel','')<>''),'[]'::jsonb)||jsonb_build_array(jsonb_build_object('uid','office:1502','name','營業所共用帳號','accountLabel','1502@ttl.com'));end if;
+ if action='directory' then return coalesce((select jsonb_agg(jsonb_build_object('uid',p->>'uid','name',coalesce((select d.data->>'preferredOwner' from public.planner_documents d where d.owner_id::text=p->>'uid' and d.bucket='settings' and d.document_id='customerMaster'),p->>'name',p->>'accountLabel'),'accountLabel',p->>'accountLabel')) from jsonb_array_elements(directory) p where p->>'active'='true' and coalesce(p->>'accountLabel','')<>''),'[]'::jsonb)||jsonb_build_array(jsonb_build_object('uid','office:1502','name','營業所共用帳號','accountLabel','1502@ttl.com'));end if;
  if target='office:1502' then
   label:='1502@ttl.com';select jsonb_build_object('uid',owner_id,'envelope',envelope,'account',account) into binding from planner_private.shared_office_account where owner_id=auth.uid();
  else
