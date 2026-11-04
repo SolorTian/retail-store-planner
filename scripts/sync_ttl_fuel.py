@@ -14,7 +14,9 @@ def download_fuel(account,password,year,month):
  matched=[]
  for row in re.findall(r'<tr\b[^>]*>.*?</tr>',page,re.S):
   text=re.sub('<[^>]+>',' ',unescape(row))
-  if not re.search(r'-'+re.escape(staff)+r'(?=\s|$)',text):continue
+  first=re.search(r'<td\b[^>]*>(.*?)</td>',row,re.S)
+  label=re.sub('<[^>]+>',' ',unescape(first.group(1))).strip() if first else ''
+  if not (re.search(r'[-－]'+re.escape(staff)+r'$',label) or staff=='1502' and label=='1502'):continue
   matched.extend(unescape(href) for href in re.findall(r'href=["\']([^"\']+)',row) if urllib.parse.urlsplit(unescape(href)).path=='/ubmsys_report_oil_expense/custom_form')
  if len(set(matched))!=1:raise ValueError('Personal mileage row unavailable')
  path=matched[0];split=urllib.parse.urlsplit(path);query=urllib.parse.parse_qs(split.query)
@@ -36,7 +38,8 @@ def parse_fuel(data,account,year,month):
   rows=list(w.active.iter_rows(values_only=True))
   if len(rows)<6 or rows[3][0]!='日期' or rows[3][1]!='起迄地點' or rows[3][4]!='里程數(公里)':raise ValueError('Invalid mileage columns')
   owner=str(rows[1][1] or '').strip()
-  if not owner.endswith('-'+account.split('@')[0]):raise ValueError('Personal mileage owner mismatch')
+  staff=account.split('@')[0]
+  if not (owner.endswith('-'+staff) or owner.endswith('－'+staff) or staff=='1502' and owner=='1502'):raise ValueError('Personal mileage owner mismatch')
   items=[];seen=set()
   for row in rows[5:]:
    if not row[0]:continue
