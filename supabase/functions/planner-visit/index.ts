@@ -1,6 +1,6 @@
 const PROJECT='https://kzzyeoehfbvslxfcyayi.supabase.co',ORIGIN='https://solortian.github.io';
 export async function visitHandler(request,env,fetcher=fetch){
- const headers={'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':ORIGIN,'Vary':'Origin','Access-Control-Allow-Headers':'authorization, apikey, content-type, x-planner-account','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
+ const headers={'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':ORIGIN,'Vary':'Origin','Access-Control-Allow-Headers':'authorization, apikey, content-type, x-planner-account, x-planner-target','Access-Control-Allow-Methods':'GET, POST, OPTIONS'};
  const reply=(status,data)=>new Response(JSON.stringify(data),{status,headers});
  if(request.headers.get('Origin')!==ORIGIN)return reply(403,{error:'不允許的來源'});
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers});
@@ -8,13 +8,14 @@ export async function visitHandler(request,env,fetcher=fetch){
  if(!env.PLANNER_GITHUB_TOKEN||!env.SUPABASE_PUBLISHABLE_KEY)return reply(503,{error:'更新服務尚未設定'});
  try{
   const user=await fetcher(PROJECT+'/auth/v1/user',{headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,Authorization:authorization},signal:AbortSignal.timeout(15000)});if(!user.ok)return reply(401,{error:'請重新確認登入'});
-  const scope=request.headers.get('x-planner-account');if(scope&&scope!=='1502')return reply(400,{error:'無效的帳號範圍'});
-  const context=await fetcher(PROJECT+'/rest/v1/rpc/planner_visit_context',{method:'POST',headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,Authorization:authorization,'Content-Type':'application/json'},body:JSON.stringify({shared:scope==='1502'}),signal:AbortSignal.timeout(15000)});
+  const target=request.headers.get('x-planner-target');if(target&&!/^(office:1502|[a-f0-9-]{36})$/.test(target))return reply(400,{error:'無效的訪員'});const scope=request.headers.get('x-planner-account');if(scope&&scope!=='1502')return reply(400,{error:'無效的帳號範圍'});
+  const context=await fetcher(PROJECT+'/rest/v1/rpc/'+(target?'planner_admin_fuel':'planner_visit_context'),{method:'POST',headers:{apikey:env.SUPABASE_PUBLISHABLE_KEY,Authorization:authorization,'Content-Type':'application/json'},body:JSON.stringify(target?{action:'context',target}:{shared:scope==='1502'}),signal:AbortSignal.timeout(15000)});
   if(!context.ok)return reply(context.status===401?401:403,{error:'沒有更新此帳號的權限，或尚未設定業務王帳號'});
   const binding=await context.json(),path=new URL(request.url).searchParams.get('path')||'';
   let body;
   if(request.method==='POST'&&path==='/actions/workflows/ttl-visit-sync.yml/dispatches'){
    const input=await request.json(),i=input.inputs||{};
+   if(target&&i.dataset!=='fuel')return reply(403,{error:'此入口僅限油料資料'});
    if(input.ref!=='main'||!['visits','customers','all','work','fuel'].includes(i.dataset)||!/^20\d{2}$/.test(String(i.year))||!/^([1-9]|1[0-2])$/.test(String(i.month||1))||!/^[a-f0-9]{32}$/.test(i.request_id||'')||!/^[A-Za-z0-9+/=]{300,1200}$/.test(i.public_key||'')||i.credential_blob&&i.credential_blob!==binding.envelope)return reply(400,{error:'更新參數或帳號已變更，請重新載入帳號設定'});
    body=JSON.stringify({ref:'main',inputs:{year:String(i.year),month:String(i.month||1),dataset:i.dataset,request_id:i.request_id,public_key:i.public_key,credential_blob:binding.envelope,user_id:binding.uid}});
   }else if(request.method!=='GET'||!(/^\/actions\/workflows\/ttl-visit-sync\.yml\/runs\?event=workflow_dispatch&per_page=30$/.test(path)||/^\/actions\/runs\/\d{6,20}$/.test(path)))return reply(400,{error:'不允許的更新操作'});
