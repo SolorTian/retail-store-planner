@@ -1,6 +1,6 @@
 async function makeOfficeWorkbook72(data,price,department,vehicles,originalData){
  validateFuel30(data,data.period);if(!Number.isFinite(price)||price<=0||price>200)throw Error('請輸入有效平均油價');
- const response=await fetch(new URL('fuel-template33.xlsx',document.baseURI),{cache:'no-store'});if(!response.ok)throw Error('申請表範本下載失敗');
+ const response=await fetch(new URL('fuel-template33.xlsx',document.baseURI),{cache:'force-cache',signal:AbortSignal.timeout(30000)});if(!response.ok)throw Error('申請表範本下載失敗');
  const zip=await JSZip.loadAsync(await response.arrayBuffer()),ns='http://schemas.openxmlformats.org/spreadsheetml/2006/main',parse=text=>new DOMParser().parseFromString(text,'application/xml'),xml=parse(await zip.file('xl/worksheets/sheet1.xml').async('string'));
  if(xml.querySelector('parsererror'))throw Error('申請表範本格式不符');
  const rows=()=>[...xml.getElementsByTagNameNS(ns,'row')],extra=Math.max(0,data.items.length-18),mapRow=r=>r>=24?r+extra:r;
