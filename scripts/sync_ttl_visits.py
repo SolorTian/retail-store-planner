@@ -140,7 +140,7 @@ def main():
     customers = parse_customers(download_customers(account, password)) if dataset in ('customers', 'all') else None
     month = int(os.environ.get('SYNC_MONTH') or datetime.now(timezone.utc).month)
     if not 1 <= month <= 12: raise ValueError('Invalid month')
-    work = parse_work(download_work(account, password, year, month)) if dataset == 'work' else None
+    work = parse_work(download_work(account, password, year, month, owner_staff=account.split('@')[0])) if dataset == 'work' else None
     if dataset == 'fuel':
         work = {'items': [], 'columns': [], 'fuel': parse_fuel(download_fuel(account,password,year,month),account,year,month)}
     if dataset == 'work' and work is not None:
