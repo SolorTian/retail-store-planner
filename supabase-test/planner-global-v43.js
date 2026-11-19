@@ -11,7 +11,7 @@ function drawGlobalDaily36(){
  note.textContent=globalDaily36.error?globalDaily36.error:!s?'每天15:00後第一位已授權成員開站觸發全員更新，每天共用一次。':
   s.status==='waiting_15'?'每天台灣時間15:00後，第一位已授權成員開站才啟動一次全員更新。':s.status==='not_started'?'今天尚未啟動全員更新；已登入成員開站後會自動觸發。':s.status==='done'?'訪員資料已完成；問卷與專案報表請查看更新狀況。':s.status==='no_eligible_accounts'?'今天沒有已驗證綁定的可更新帳戶。':
   s.status==='partial_failure'?'全站更新部分失敗，已完成 '+s.done+'／'+s.total+' 個帳戶。':
-  '今天的全站資料更新中：'+s.done+'／'+s.total+' 個帳戶完成。';
+  '更新中：訪員資料 '+s.done+'／'+s.total+' 位；問卷／專案報表 '+(s.extraDone||0)+'／'+(s.extraTotal||0)+' 份完成。';
 }
 async function refreshCompanyCache36(){
  if(localDirty||cloudBusy)return false;
