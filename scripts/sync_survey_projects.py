@@ -94,9 +94,9 @@ def rpc(action,job_id,lease=None,payload=None):
   with urllib.request.urlopen(req,timeout=60) as response:return json.load(response)
  except Exception:raise RuntimeError('Private report operation failed') from None
 
-def main():
+def run_request(job_id):
  if os.environ.get('GITHUB_REPOSITORY')!='SolorTian/retail-store-planner' or os.environ.get('GITHUB_REF')!='refs/heads/main':raise ValueError('Trusted workflow required')
- job_id=os.environ['SURVEY_REQUEST'];job=rpc('claim',job_id)
+ job=rpc('claim',job_id)
  if not job.get('claimed'):print('No report work claimed.');return
  try:
   key=serialization.load_pem_private_key(os.environ['TTL_CREDENTIAL_PRIVATE_KEY'].encode(),password=None);account,password=decrypt_binding(job,key)
@@ -139,4 +139,6 @@ def main():
   safe={'Report table unavailable','Report identity columns changed','Report body unavailable','Report row shape changed','Survey catalogue unavailable','Survey catalogue empty','Company session expired','Report exceeds page limit; narrow the date range'}
   print('Report read incomplete: '+(str(error) if str(error) in safe else type(error).__name__),flush=True)
   rpc('fail',job_id,job['lease']);raise RuntimeError('Report read incomplete; previous result retained') from None
+def main():
+ run_request(os.environ['SURVEY_REQUEST'])
 if __name__=='__main__':main()

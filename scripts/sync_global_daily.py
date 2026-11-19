@@ -207,6 +207,25 @@ def export_job(job, private_key):
         return {'documents':docs,'credential':seal_binding(job['linkedTo'],account,password,private_key)}
     return docs
 
+def refresh_daily_surveys(day, deadline):
+    # Execute private reports in the existing trusted workflow, never in visitors' browsers.
+    from sync_survey_projects import run_request
+    while time.monotonic()<deadline:
+        url=os.environ['SUPABASE_URL'].rstrip('/')
+        key=os.environ['SUPABASE_SERVICE_ROLE_KEY']
+        if url!='https://kzzyeoehfbvslxfcyayi.supabase.co':raise ValueError('Unexpected database')
+        req=urllib.request.Request(url+'/rest/v1/rpc/planner_daily_surveys76',data=json.dumps({'batch_day':day}).encode(),headers={'apikey':key,**({} if key.startswith('sb_secret_') else {'Authorization':'Bearer '+key}),'Content-Type':'application/json'})
+        with urllib.request.urlopen(req,timeout=60) as response:state=json.load(response)
+        if state.get('waiting'):
+            time.sleep(15)
+            continue
+        if not state.get('request'):
+            print('Daily questionnaire/report queue processed; see saved per-task status.')
+            return
+        try:run_request(state['request'])
+        except Exception:print('One daily questionnaire/report incomplete; previous report retained.')
+    raise RuntimeError('Daily report queue time limit reached')
+
 def main():
     if os.environ.get('GITHUB_REPOSITORY')!='SolorTian/retail-store-planner' or os.environ.get('GITHUB_REF')!='refs/heads/main':
         raise ValueError('Trusted main workflow required')
@@ -216,15 +235,17 @@ def main():
     else:
         day = date.fromisoformat(os.environ['BATCH_DAY']).isoformat()
     private_key = serialization.load_pem_private_key(os.environ['TTL_CREDENTIAL_PRIVATE_KEY'].encode(),password=None)
-    deadline = time.monotonic()+150*60
+    deadline = time.monotonic()+330*60
     while time.monotonic()<deadline:
         state = rpc('claim',day)
         job = state.get('job')
         if not job:
-            if state['status']=='pending':
+            if state['status']=='pending' and state.get('memberStatus','pending')=='pending':
                 time.sleep(60)
                 continue
-            print('Daily batch status: '+state['status'])
+            refresh_daily_surveys(day,deadline)
+            state = rpc('claim',day)
+            print('Daily member batch status: '+state['status'])
             return 0 if state['status'] in ('done','no_eligible_accounts') else 1
         try:
             docs = export_job(job,private_key)

@@ -15,7 +15,7 @@ jobs:
   refresh:
     if: github.repository == 'SolorTian/retail-store-planner' && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.actor == github.repository_owner)
     runs-on: ubuntu-24.04
-    timeout-minutes: 160
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -30,4 +30,3 @@ jobs:
           TTL_CREDENTIAL_PRIVATE_KEY: ${{ secrets.TTL_CREDENTIAL_PRIVATE_KEY }}
           BATCH_DAY: ${{ inputs.batch_day }}
         run: python scripts/sync_global_daily.py
-
