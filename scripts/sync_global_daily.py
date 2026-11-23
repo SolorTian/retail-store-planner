@@ -155,7 +155,7 @@ def prepare_documents(day, account, customers, visits, work, fuels, offsets, sou
         index += 1
     docs.append(document('settings','syncReceipt',{
         'customers':{'sourceAt':source_at,'count':len(active_codes)},
-        'visits':{'sourceAt':source_at,'count':len(visits)},
+        'visits':{'sourceAt':source_at,'count':len(visits),'year':anchor.year,'month':anchor.month,'monthVisits':sum(row['visits'][anchor.month-1] for row in visits)},
         'work':{'sourceAt':source_at,'count':len(work['items'])}}))
     json.dumps(docs, allow_nan=False)  # Reject NaN and Infinity before any publication.
     return docs
@@ -207,15 +207,16 @@ def export_job(job, private_key):
         return {'documents':docs,'credential':seal_binding(job['linkedTo'],account,password,private_key)}
     return docs
 
-def refresh_daily_surveys(day, deadline):
+def refresh_daily_surveys(day, deadline, generation):
     # Execute private reports in the existing trusted workflow, never in visitors' browsers.
     from sync_survey_projects import run_request
     while time.monotonic()<deadline:
         url=os.environ['SUPABASE_URL'].rstrip('/')
         key=os.environ['SUPABASE_SERVICE_ROLE_KEY']
         if url!='https://kzzyeoehfbvslxfcyayi.supabase.co':raise ValueError('Unexpected database')
-        req=urllib.request.Request(url+'/rest/v1/rpc/planner_daily_surveys76',data=json.dumps({'batch_day':day}).encode(),headers={'apikey':key,**({} if key.startswith('sb_secret_') else {'Authorization':'Bearer '+key}),'Content-Type':'application/json'})
+        req=urllib.request.Request(url+'/rest/v1/rpc/planner_daily_surveys79',data=json.dumps({'batch_day':day,'batch_generation':generation}).encode(),headers={'apikey':key,**({} if key.startswith('sb_secret_') else {'Authorization':'Bearer '+key}),'Content-Type':'application/json'})
         with urllib.request.urlopen(req,timeout=60) as response:state=json.load(response)
+        if state.get('changed'):return
         if state.get('waiting'):
             time.sleep(15)
             continue
@@ -225,6 +226,12 @@ def refresh_daily_surveys(day, deadline):
         try:run_request(state['request'])
         except Exception:print('One daily questionnaire/report incomplete; previous report retained.')
     raise RuntimeError('Daily report queue time limit reached')
+
+def advance_slots79(day):
+    url=os.environ['SUPABASE_URL'].rstrip('/');key=os.environ['SUPABASE_SERVICE_ROLE_KEY']
+    if url!='https://kzzyeoehfbvslxfcyayi.supabase.co':raise ValueError('Unexpected database')
+    req=urllib.request.Request(url+'/rest/v1/rpc/planner_daily_advance79',data=json.dumps({'batch_day':day}).encode(),headers={'apikey':key,**({} if key.startswith('sb_secret_') else {'Authorization':'Bearer '+key}),'Content-Type':'application/json'})
+    with urllib.request.urlopen(req,timeout=60) as response:return json.load(response)
 
 def main():
     if os.environ.get('GITHUB_REPOSITORY')!='SolorTian/retail-store-planner' or os.environ.get('GITHUB_REF')!='refs/heads/main':
@@ -243,8 +250,9 @@ def main():
             if state['status']=='pending' and state.get('memberStatus','pending')=='pending':
                 time.sleep(60)
                 continue
-            refresh_daily_surveys(day,deadline)
-            state = rpc('claim',day)
+            refresh_daily_surveys(day,deadline,state.get('generation'))
+            state = advance_slots79(day)
+            if state.get('continue'):continue
             print('Daily member batch status: '+state['status'])
             return 0 if state['status'] in ('done','no_eligible_accounts') else 1
         try:
@@ -269,3 +277,4 @@ if __name__=='__main__':
     except Exception:
         print('Daily batch could not run. Check server configuration and saved job status.')
         raise SystemExit(1)
+

@@ -8,36 +8,41 @@ function drawGlobalDaily36(){
  let note=document.getElementById('globalDaily36');
  if(!note){note=document.createElement('p');note.id='globalDaily36';note.className='daily-refresh-note';root.append(note);}
  const s=globalDaily36.state;
- note.textContent=globalDaily36.error?globalDaily36.error:!s?'每天15:00後第一位已授權成員開站觸發全員更新，每天共用一次。':
-  s.status==='waiting_15'?'每天台灣時間15:00後，第一位已授權成員開站才啟動一次全員更新。':s.status==='not_started'?'今天尚未啟動全員更新；已登入成員開站後會自動觸發。':s.status==='done'?'訪員資料已完成；問卷與專案報表請查看更新狀況。':s.status==='no_eligible_accounts'?'今天沒有已驗證綁定的可更新帳戶。':
+ note.textContent=globalDaily36.error?globalDaily36.error:!s?'每天08:00起與15:00起，各由第一位已授權成員開站觸發一次全員更新。':
+  s.status==='waiting_8'?'每天台灣時間08:00起、15:00起各更新一次；目前尚未到上午時段。':s.status==='not_started'?'今天尚未啟動全員更新；已登入成員開站後會自動觸發。':s.status==='done'?'訪員資料已完成；問卷與專案報表請查看更新狀況。':s.status==='no_eligible_accounts'?'今天沒有已驗證綁定的可更新帳戶。':
   s.status==='partial_failure'?'全站更新部分失敗，已完成 '+s.done+'／'+s.total+' 個帳戶。':
   '更新中：訪員資料 '+s.done+'／'+s.total+' 位；問卷／專案報表 '+(s.extraDone||0)+'／'+(s.extraTotal||0)+' 份完成。';
 }
+function dailySlot79(){const hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',hourCycle:'h23'}).format(new Date()));return hour>=15?2:hour>=8?1:0;}
 async function refreshCompanyCache36(){
- if(localDirty||cloudBusy)return false;
- const uid=cloudUser?.uid,generation=editGeneration;
- const [customers,visits,master,closed]=await Promise.all([
-  firebaseApi.getDocs(cloudCollection('customers')),firebaseApi.getDocs(cloudCollection('visits')),
-  firebaseApi.getDoc(firebaseApi.doc(cloudCollection('settings'),'customerMaster')),
-  firebaseApi.getDoc(firebaseApi.doc(cloudCollection('settings'),'closedStores'))]);
- if(cloudUser?.uid!==uid||localDirty||cloudBusy||generation!==editGeneration)return false;
- customerDb=customers.docs.map(d=>d.data());excel=visits.docs.map(d=>d.data());
- customerMaster=master.exists()?master.data():null;closedStoreCodes=new Set(closed.exists()?closed.data().codes||[]:[]);
- // Do not reload a route, change selection/order, reset filters, or move the map viewport.
- await fuelSave34;
- await fuelLoad34();
- if(cloudUser?.uid!==uid)return false;
- connectWorkAccount(true);pendingListKey40='';if(managerAllowed())await loadPendingManager42(true);
- cacheState();render();return true;
+ if(cloudBusy)return false;const uid=cloudUser?.uid;if(!uid)return false;
+ const receipt=await firebaseApi.getDoc(firebaseApi.doc(cloudCollection('settings'),'syncReceipt'));
+ if(cloudUser?.uid!==uid||cloudBusy)return false;const data=receipt.exists()?receipt.data():null,stamp=JSON.stringify(data||{});
+ if(!data?.visits?.sourceAt)return false;
+ if(globalDaily36.loadedReceipt===stamp)return true;
+ const [customers,visits,master,closed]=await Promise.all([firebaseApi.getDocs(cloudCollection('customers')),firebaseApi.getDocs(cloudCollection('visits')),firebaseApi.getDoc(firebaseApi.doc(cloudCollection('settings'),'customerMaster')),firebaseApi.getDoc(firebaseApi.doc(cloudCollection('settings'),'closedStores'))]);
+ if(cloudUser?.uid!==uid||cloudBusy)return false;
+ // Route-only local edits must never block a fresh visit snapshot. Preserve actual unsaved data edits by code.
+ const visitDrafts=new Set([...pendingVisits].map(String)),customerDrafts=new Set([...pendingCustomers].map(String)),localVisits=excel.filter(x=>visitDrafts.has(String(x.code))),localCustomers=new Map([...db,...customerDb].filter(x=>customerDrafts.has(String(x.code))).map(x=>[String(x.code),x]));
+ const remoteVisits=visits.docs.map(d=>d.data());if(remoteVisits.some(x=>!Array.isArray(x.visits)||x.visits.length!==12))throw Error('雲端訪況格式不完整，保留原資料');
+ excel=remoteVisits.filter(x=>!visitDrafts.has(String(x.code))).concat(localVisits);
+ const merged=new Map(customers.docs.map(d=>{const x=d.data();return [String(x.code),x]}));for(const [code,x]of localCustomers)merged.set(code,x);customerDb=[...merged.values()];
+ if(!customerMasterDirty)customerMaster=master.exists()?master.data():null;
+ closedStoreCodes=new Set([...(closed.exists()?closed.data().codes||[]:[]),...pendingClosedStores]);
+ receiptData23=data;drawReceipt23(data);globalDaily36.loadedReceipt=stamp;
+ cacheState();render();connectWorkAccount(true);pendingListKey40='';
+ try{await fuelSave34;await fuelLoad34();if(cloudUser?.uid===uid&&managerAllowed())await loadPendingManager42(true);}catch(e){if(cloudUser?.uid===uid)updateCloudUi('訪況已載入，其他資料尚待確認：'+cloudMessage(e));}
+ return cloudUser?.uid===uid;
 }
+
 runDailyRefresh=async function(manual=false){
  if(!globalDailyEnabled36())return accountDaily36();
  if(manual&&!isPlannerAdmin())return;
  if(!cloudUser||!membershipReady||membershipRevoked||document.hidden||globalDaily36.busy)return;
- const uid=cloudUser.uid,key=uid+':'+todayRouteDate();
+ const uid=cloudUser.uid,key=uid+':'+todayRouteDate()+':'+dailySlot79();
  if(globalDaily36.key!==key)globalDaily36={key,next:0,busy:false,loaded:false,state:null};
  if(!manual&&Date.now()<globalDaily36.next)return;
- if(!manual&&Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',hourCycle:'h23'}).format(new Date()))<15){globalDaily36.state={day:todayRouteDate(),status:'waiting_15'};globalDaily36.next=Date.now()+30000;drawGlobalDaily36();drawGlobalControls40();return;}
+ if(!manual&&dailySlot79()===0){globalDaily36.state={day:todayRouteDate(),status:'waiting_8'};globalDaily36.next=Date.now()+30000;drawGlobalDaily36();drawGlobalControls40();return;}
  globalDaily36.busy=true;globalDaily36.error='';drawGlobalControls40();
  try{
   const token=await cloudUser.getIdToken();if(cloudUser?.uid!==uid)return;
@@ -46,15 +51,16 @@ runDailyRefresh=async function(manual=false){
    method:'POST',headers:{Authorization:'Bearer '+token,apikey:SUPABASE_TEST_CONFIG.publishableKey,'Content-Type':'application/json'},body:JSON.stringify(manual?{mode:'manual',requestId:manualRequest40||(manualRequest40=crypto.randomUUID())}:{mode:'daily'}),
    signal:AbortSignal.timeout(30000)});
   const state=await response.json();
-  if(cloudUser?.uid!==uid||key!==uid+':'+todayRouteDate())return;
+  if(cloudUser?.uid!==uid||key!==uid+':'+todayRouteDate()+':'+dailySlot79())return;
   if(!response.ok)throw Error(state.error||'全站更新尚未確認');
   if(state.day!==todayRouteDate())throw Error('裝置日期與台灣日期不同，尚未確認今天的更新');
   globalDaily36.state=state;
   if(manual){manualRequest40=null;globalDaily36.loaded=false;}
-  if(state.status==='done'){
-   if(!globalDaily36.loaded)globalDaily36.loaded=await refreshCompanyCache36();
-   globalDaily36.next=globalDaily36.loaded?Infinity:Date.now()+30000;
-  }else globalDaily36.next=state.status==='no_eligible_accounts'?Infinity:Date.now()+60000;
+  const memberVersion=(state.syncKey||state.day)+':'+state.done+':'+state.memberStatus;
+  if(Number(state.done)>0&&globalDaily36.memberVersion!==memberVersion){if(await refreshCompanyCache36())globalDaily36.memberVersion=memberVersion;}
+  // Keep a lightweight status check: a later slot or manual refresh may produce a new generation.
+  globalDaily36.next=Date.now()+60000;
+
  }catch(error){
   globalDaily36.error='全站更新尚未確認：'+cloudMessage(error);
   globalDaily36.next=Date.now()+60000;
@@ -79,7 +85,7 @@ function drawGlobalControls40(){
  const allowed=isPlannerAdmin()&&plannerAccessReady();globalCard40.hidden=!allowed;
  if(!allowed){pendingRows40.replaceChildren();return;}
  globalButton40.disabled=!globalDailyEnabled36()||globalDaily36.busy||globalDaily36.state?.status==='pending';
- const s=globalDaily36.state;globalMessage40.textContent=!globalDailyEnabled36()?'後端尚未啟用，尚不能更新全員資料。':globalDaily36.busy?'正在確認全員更新狀態…':globalDaily36.error?globalDaily36.error:!s?'每天15:00後第一位已授權成員開站啟動；包含訪員資料、問卷選單與專案報表。':s.status==='done'?'訪員資料完成：'+s.done+'／'+s.total+' 位':s.status==='partial_failure'?'更新部分失敗：完成 '+s.done+'／'+s.total+' 位，可按按鈕重試。':s.status==='waiting_15'?'每天台灣時間15:00後，第一位已授權成員開站才啟動一次全員更新。':s.status==='not_started'?'今天尚未啟動全員更新。':s.status==='no_eligible_accounts'?'沒有可更新的綁定帳戶。':'全員更新進行中：'+s.done+'／'+s.total+' 位。';
+ const s=globalDaily36.state;globalMessage40.textContent=!globalDailyEnabled36()?'後端尚未啟用，尚不能更新全員資料。':globalDaily36.busy?'正在確認全員更新狀態…':globalDaily36.error?globalDaily36.error:!s?'每天08:00起與15:00起，各由首次開站觸發；包含訪員資料、問卷選單與專案報表。':s.status==='done'?'訪員資料完成：'+s.done+'／'+s.total+' 位':s.status==='partial_failure'?'更新部分失敗：完成 '+s.done+'／'+s.total+' 位，可按按鈕重試。':s.status==='waiting_8'?'每天台灣時間08:00起、15:00起各更新一次；目前尚未到上午時段。':s.status==='not_started'?'今天尚未啟動全員更新。':s.status==='no_eligible_accounts'?'沒有可更新的綁定帳戶。':'全員更新進行中：'+s.done+'／'+s.total+' 位。';
 }
 let pendingListKey40='';
 async function loadPendingVisitors40(){
@@ -100,3 +106,4 @@ drawGlobalControls40();
 releaseButton.textContent='v1.43';releaseButton.setAttribute('aria-label','版本 v1.43，查看更新紀錄');const release43=document.createElement('article');release43.className='release-entry';release43.innerHTML='<b>v1.43</b><time>2026-10-17</time><p>啟用管理總覽的一鍵更新全部訪員資料；每天由主使用者首次開站啟動全員背景更新，一般成員使用已更新資料並可自行手動更新。納入尚未連結 Google 的業務王訪員，之後由管理員連結已驗證的 Google 成員。顯示實際完成／失敗狀態，背景更新不重排已安排路線。</p>';releaseHistory.querySelector('h2').after(release43);
 
 const globalManagerDraw40=renderManagerOverview;renderManagerOverview=function(){globalManagerDraw40();if(managerAllowed())loadPendingVisitors40();};
+
